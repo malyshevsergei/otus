@@ -9,8 +9,6 @@ This Terraform module creates and manages compute instances (VMs) in Yandex Clou
 - Flexible boot disk configuration (size, type, image)
 - Network interface configuration with optional NAT
 - SSH key injection for secure access
-- Cloud-init user data support
-- Labels and preemptible instances support
 
 ## Usage
 
@@ -64,7 +62,6 @@ module "vm" {
 | boot_disk_type | Type of the boot disk | `string` | `"network-hdd"` | no |
 | nat | Enable NAT for the instance | `bool` | `true` | no |
 | ssh_keys | List of SSH public keys for the default user | `list(string)` | `[]` | no |
-| user_data | User data (cloud-init) for instance initialization | `string` | `null` | no |
 | labels | Labels to assign to the instance | `map(string)` | `{}` | no |
 | preemptible | Create preemptible (spot) instance | `bool` | `false` | no |
 
