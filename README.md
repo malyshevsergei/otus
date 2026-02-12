@@ -138,7 +138,3 @@ module "spot_vm" {
   memory      = 2
 }
 ```
-
-## License
-
-MIT
