@@ -1,0 +1,13 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+folder_id = "your-folder-id-here"
+
+zone = "ru-central1-a"
+
+name_prefix = "myapp"
+
+cores  = 2
+memory = 2
+
+image_family = "ubuntu-2204-lts"
+disk_size    = 20
