@@ -1,10 +1,19 @@
 ---
-- name: Configure backend servers
+# 1. Database first — backends need it during Joomla CLI install
+- name: Configure database server
+  hosts: db
+  become: true
+  roles:
+    - mariadb
+
+# 2. Install Joomla on all backends (CLI install runs once on backend-1)
+- name: Configure Joomla backends
   hosts: backends
   become: true
   roles:
-    - nginx_backend
+    - joomla
 
+# 3. Configure Nginx load balancer
 - name: Configure load balancer
   hosts: lb
   become: true

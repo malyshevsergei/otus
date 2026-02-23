@@ -51,6 +51,41 @@ resource "yandex_compute_instance" "lb" {
   scheduling_policy { preemptible = true }
 }
 
+# ── Database VM ───────────────────────────────────────────────────────────────
+resource "yandex_compute_instance" "db" {
+  name        = "db"
+  hostname    = "db"
+  zone        = var.zone
+  folder_id   = var.folder_id
+  platform_id = "standard-v3"
+
+  resources {
+    cores         = 2
+    memory        = 4
+    core_fraction = 20
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = data.yandex_compute_image.ubuntu.id
+      size     = 20
+      type     = "network-hdd"
+    }
+  }
+
+  network_interface {
+    subnet_id  = yandex_vpc_subnet.subnet.id
+    ip_address = "10.0.0.20"
+    nat        = true   # NAT for Ansible access and package installs
+  }
+
+  metadata = {
+    ssh-keys = "ubuntu:${file("~/.ssh/id_rsa.pub")}"
+  }
+
+  scheduling_policy { preemptible = true }
+}
+
 # ── Backend VMs ───────────────────────────────────────────────────────────────
 resource "yandex_compute_instance" "backend" {
   count       = 2

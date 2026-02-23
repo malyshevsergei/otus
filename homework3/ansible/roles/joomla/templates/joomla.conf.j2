@@ -1,0 +1,24 @@
+server {
+    listen 80;
+    server_name _;
+
+    root {{ joomla_root }};
+    index index.php;
+
+    # Main location — Joomla's front-controller
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # PHP-FPM
+    location ~ \.php$ {
+        fastcgi_pass  unix:/run/php/php8.1-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include       fastcgi_params;
+    }
+
+    # Deny access to sensitive paths
+    location ~* ^/(\.git|cache|bin|logs|backup|tests)/ { deny all; }
+    location ~* \.(engine|inc|info|install|make|module|profile|test|po|sh|sql|theme|tpl(\.php)?|xtmpl)$ { deny all; }
+}

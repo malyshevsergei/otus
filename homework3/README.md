@@ -1,6 +1,9 @@
-# Homework 3 — Nginx Load Balancing on Yandex Cloud
+# Homework 3 — Joomla CMS Load Balancing on Yandex Cloud
 
-Deploy 3 VMs in Yandex Cloud: 1 Nginx load balancer + 2 Nginx backend servers.
+Deploy 4 VMs in Yandex Cloud with Terraform + Ansible:
+- **lb** — Nginx reverse proxy / load balancer (public IP)
+- **backend-1, backend-2** — Nginx + PHP-FPM + Joomla 5
+- **db** — MariaDB (shared database for both backends)
 
 ## Architecture
 
@@ -10,11 +13,19 @@ Internet
    ▼
 [lb] 10.0.0.10  (public IP)
  Nginx upstream (round-robin or ip_hash)
-   ├──▶ [backend-1] 10.0.0.11
-   └──▶ [backend-2] 10.0.0.12
+   ├──▶ [backend-1] 10.0.0.11  Nginx + PHP-FPM + Joomla 5
+   └──▶ [backend-2] 10.0.0.12  Nginx + PHP-FPM + Joomla 5
+                │                         │
+                └──────────┬──────────────┘
+                           ▼
+                    [db] 10.0.0.20
+                     MariaDB 10.x
 ```
 
-All VMs: Ubuntu 22.04, standard-v3, 2 vCPU / 2 GB RAM, preemptible.
+Sessions are stored in MariaDB (`$session_handler = 'database'`), so both backends
+share session state — round-robin works without sticky sessions.
+
+All VMs: Ubuntu 22.04, standard-v3, preemptible.
 
 ## Prerequisites
 
@@ -37,70 +48,78 @@ terraform apply \
   -var="folder_id=$YC_FOLDER_ID"
 ```
 
-After apply, note the outputs:
+Note the outputs:
 
 ```
 lb_public_ip       = "<lb-public-ip>"
-backend_public_ips = ["<backend-1-public-ip>", "<backend-2-public-ip>"]
+backend_public_ips = ["<b1-ip>", "<b2-ip>"]
+db_public_ip       = "<db-ip>"
 ```
 
 ### 2. Update inventory
 
-Edit [ansible/inventory/hosts.yml](ansible/inventory/hosts.yml) and replace the
-`ansible_host` values with the actual public IPs from Terraform output:
-
-```yaml
-lb:
-  hosts:
-    lb:
-      ansible_host: <lb_public_ip>
-
-backends:
-  hosts:
-    backend-1:
-      ansible_host: <backend-1-public-ip>
-    backend-2:
-      ansible_host: <backend-2-public-ip>
-```
+Edit [ansible/inventory/hosts.yml](ansible/inventory/hosts.yml) — replace `ansible_host`
+values with actual public IPs from Terraform output. The `db` host needs to be filled in.
 
 ### 3. Ansible
 
 ```bash
 cd homework3/ansible
 
-# Round-robin (default)
+# Deploy everything (DB → backends → LB)
 ansible-playbook -i inventory/hosts.yml site.yml
-
-# ip_hash (sticky sessions)
-ansible-playbook -i inventory/hosts.yml site.yml \
-  -e lb_method=hash
 ```
 
-### 4. Test
+The playbook runs in order:
+1. **db** — Installs MariaDB, creates `joomla` database and user, opens remote access
+2. **backends** — Installs Nginx + PHP 8.1 FPM + Joomla 5; runs the Joomla CLI installer
+   **once** (on backend-1) to initialise the DB schema; deploys identical `configuration.php`
+   to both backends
+3. **lb** — Configures Nginx upstream pointing to backend-1 and backend-2
+
+### 4. Access
+
+Open `http://<lb_public_ip>` — Joomla front-end.
+Admin: `http://<lb_public_ip>/administrator`
+Credentials: `admin` / `Admin1234!`
+
+### 5. Test load balancing
 
 ```bash
 LB=<lb_public_ip>
 
-# Round-robin: each request hits a different backend
-for i in $(seq 1 6); do curl -s http://$LB | grep -o 'backend-[0-9]*'; done
+# Round-robin — responses come from alternating backends
+for i in $(seq 1 6); do curl -sI http://$LB | head -1; done
 
-# ip_hash: all requests from your IP go to the same backend
-for i in $(seq 1 6); do curl -s http://$LB | grep -o 'backend-[0-9]*'; done
+# Switch to ip_hash (sticky per client IP)
+ansible-playbook -i inventory/hosts.yml site.yml -e lb_method=hash
 ```
 
 ## Balancing Methods
 
-| `lb_method` | Nginx directive | Behaviour |
+| `lb_method` | Nginx directive | Sessions |
 |---|---|---|
-| `roundrobin` | _(none — default)_ | Requests distributed evenly across backends |
-| `hash` | `ip_hash` | Client IP hashed → same backend per client |
+| `roundrobin` | _(none — default)_ | DB-based sessions work across both backends |
+| `hash` | `ip_hash` | Client IP pinned to one backend |
 
-Switch methods without reprovisioning:
+Switch without re-deploying Joomla:
 
 ```bash
 ansible-playbook -i inventory/hosts.yml site.yml -e lb_method=hash
 ansible-playbook -i inventory/hosts.yml site.yml -e lb_method=roundrobin
 ```
+
+## Key Variables (`group_vars/all.yml`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `lb_method` | `roundrobin` | `roundrobin` or `hash` |
+| `joomla_version` | `5.2.3` | Joomla release to download from GitHub |
+| `joomla_site_name` | `Joomla Cluster` | Site title |
+| `joomla_admin_pass` | `Admin1234!` | Admin password |
+| `db_host` | `10.0.0.20` | MariaDB private IP |
+| `db_password` | `JoomlaDB123!` | DB user password |
+| `joomla_secret` | *(set)* | Shared security key — must be identical on all backends |
 
 ## File Structure
 
@@ -109,17 +128,16 @@ homework3/
 ├── terraform/
 │   ├── providers.tf
 │   ├── variables.tf
-│   ├── main.tf          # VPC, subnet, LB VM, 2 backend VMs
+│   ├── main.tf          # VPC, lb VM, 2 backend VMs, db VM
 │   └── outputs.tf
 └── ansible/
-    ├── site.yml
-    ├── inventory/
-    │   └── hosts.yml
-    ├── group_vars/
-    │   └── all.yml      # backend_servers, lb_method, lb_port
+    ├── site.yml         # db → backends → lb
+    ├── inventory/hosts.yml
+    ├── group_vars/all.yml
     └── roles/
-        ├── nginx_lb/    # upstream.conf.j2, lb.conf.j2
-        └── nginx_backend/  # backend.conf.j2, index.html.j2
+        ├── mariadb/     # MariaDB + joomla DB/user
+        ├── joomla/      # Nginx + PHP-FPM + Joomla 5 + configuration.php
+        └── nginx_lb/    # Nginx upstream (round-robin / ip_hash)
 ```
 
 ## Cleanup
