@@ -81,7 +81,7 @@ The playbook runs in order:
 
 Open `http://<lb_public_ip>` — Joomla front-end.
 Admin: `http://<lb_public_ip>/administrator`
-Credentials: `admin` / `Admin1234!`
+Credentials: `admin` / `Admin1234!567`
 
 ### 5. Test load balancing
 
