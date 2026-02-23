@@ -1,0 +1,12 @@
+---
+- name: Configure backend servers
+  hosts: backends
+  become: true
+  roles:
+    - nginx_backend
+
+- name: Configure load balancer
+  hosts: lb
+  become: true
+  roles:
+    - nginx_lb

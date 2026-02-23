@@ -1,0 +1,43 @@
+---
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Remove default Nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Deploy backend virtual host config
+  template:
+    src: backend.conf.j2
+    dest: /etc/nginx/sites-available/backend.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Enable backend virtual host
+  file:
+    src: /etc/nginx/sites-available/backend.conf
+    dest: /etc/nginx/sites-enabled/backend.conf
+    state: link
+  notify: reload nginx
+
+- name: Deploy backend index page
+  template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+    owner: www-data
+    group: www-data
+    mode: "0644"
+  notify: reload nginx
+
+- name: Ensure Nginx is started and enabled
+  service:
+    name: nginx
+    state: started
+    enabled: yes

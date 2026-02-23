@@ -1,0 +1,14 @@
+---
+# Backend servers that the LB proxies to (private IPs)
+backend_servers:
+  - host: "10.0.0.11"
+    port: 80
+  - host: "10.0.0.12"
+    port: 80
+
+# Which balancing method to activate: "roundrobin" or "hash"
+# round-robin is Nginx default (no directive needed); hash uses ip_hash
+lb_method: "roundrobin"
+
+# Port the LB listens on
+lb_port: 80
