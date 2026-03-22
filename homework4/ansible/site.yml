@@ -1,0 +1,21 @@
+---
+# Main playbook for deploying high-availability web application
+
+- name: Setup Database Server
+  hosts: database
+  become: yes
+  roles:
+    - database
+
+- name: Setup Backend Servers with GFS2
+  hosts: backend
+  become: yes
+  roles:
+    - gfs2
+    - backend
+
+- name: Setup Nginx Load Balancers
+  hosts: nginx
+  become: yes
+  roles:
+    - nginx

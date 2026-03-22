@@ -1,0 +1,26 @@
+---
+# Backend role defaults
+
+app_name: "webapp"
+app_user: "www-data"
+app_group: "www-data"
+app_dir: "/opt/webapp"
+static_dir: "/var/www/static"
+media_dir: "/var/www/media"
+
+# Django settings
+django_secret_key: "change-me-to-a-random-secret-key-in-production"
+django_debug: "False"
+django_allowed_hosts: "*"
+
+# Database connection
+db_host: "{{ hostvars[groups['database'][0]]['internal_ip'] }}"
+db_name: "webapp_db"
+db_user: "webapp_user"
+db_password: "changeme_secure_password"
+db_port: "5432"
+
+# uWSGI settings
+uwsgi_processes: 4
+uwsgi_threads: 2
+uwsgi_socket: "127.0.0.1:8000"

@@ -1,0 +1,57 @@
+---
+# Nginx installation and configuration
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install Nginx
+  apt:
+    name:
+      - nginx
+    state: present
+
+- name: Remove default Nginx configuration
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: restart nginx
+
+- name: Create Nginx configuration for webapp
+  template:
+    src: webapp.conf.j2
+    dest: /etc/nginx/sites-available/webapp.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart nginx
+
+- name: Enable webapp site
+  file:
+    src: /etc/nginx/sites-available/webapp.conf
+    dest: /etc/nginx/sites-enabled/webapp.conf
+    state: link
+  notify: restart nginx
+
+- name: Create health check endpoint
+  copy:
+    dest: /var/www/html/health
+    content: "OK"
+    owner: "{{ nginx_user }}"
+    group: "{{ nginx_user }}"
+    mode: '0644'
+
+- name: Ensure Nginx is started and enabled
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+
+- name: Configure log rotation
+  template:
+    src: nginx-logrotate.j2
+    dest: /etc/logrotate.d/nginx
+    owner: root
+    group: root
+    mode: '0644'

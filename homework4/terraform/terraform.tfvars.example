@@ -1,0 +1,12 @@
+# Yandex Cloud credentials
+yc_cloud_id  = "your-cloud-id"
+yc_folder_id = "your-folder-id"
+yc_zone      = "ru-central1-a"
+
+# SSH settings
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+ssh_user            = "ubuntu"
+
+# Instance counts
+nginx_count   = 2
+backend_count = 2
