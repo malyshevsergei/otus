@@ -155,22 +155,22 @@ Internet
           ├─> Nginx-1 (reverse proxy)
           └─> Nginx-2 (reverse proxy)
                  │
-                 ├─> Backend-1 (Django + uWSGI)
-                 └─> Backend-2 (Django + uWSGI)
+                 ├─> Backend-1 (Django + uWSGI) [NFS Server]
+                 └─> Backend-2 (Django + uWSGI) [NFS Client]
                         │
                         └─> Database (PostgreSQL)
 
-+ GFS2 кластер для общей статики между Backend серверами
++ NFS для общей статики между Backend серверами
 ```
 
 ## Компоненты
 
-- **5 виртуальных машин** в Yandex Cloud
+- **5 виртуальных машин** в Yandex Cloud (AlmaLinux 9)
 - **Network Load Balancer** для распределения нагрузки
 - **Nginx** (2 инстанса) - reverse proxy
 - **Django + uWSGI** (2 инстанса) - приложение
-- **PostgreSQL** (1 инстанс) - база данных
-- **GFS2 cluster** - общее хранилище статики
+- **PostgreSQL 14** (1 инстанс) - база данных
+- **NFS** - общее хранилище статики (Backend-1 = сервер, Backend-2 = клиент)
 
 ## Проверка работоспособности
 
@@ -262,15 +262,11 @@ sudo systemctl status uwsgi
 ssh ubuntu@<DB_IP>
 sudo systemctl status postgresql
 
-# GFS2 кластер
-ssh ubuntu@<BACKEND_IP>
-sudo pcs status
+# NFS статус
+ssh ubuntu@<BACKEND_1_IP>
+sudo systemctl status nfs-server
+sudo exportfs -v
 ```
-
-## Стоимость
-
-Примерная стоимость в месяц при работе 24/7:
-- **~₽11 500 руб/мес** (~$125/мес)
 
 Для экономии:
 ```bash

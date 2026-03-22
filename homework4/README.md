@@ -15,7 +15,7 @@
                         [Backend-1]  [Backend-2]
                              \          /
                               \        /
-                           [GFS2 Cluster]
+                           [NFS Server] (Backend-1)
                                   |
                             [PostgreSQL DB]
 ```
@@ -29,13 +29,13 @@
 2. **Nginx серверы (2 инстанса)**
    - Reverse proxy для backend приложения
    - Балансировка нагрузки между backend серверами (least_conn)
-   - Кэширование статических файлов
+   - Обслуживание статических файлов
    - Rate limiting
 
 3. **Backend серверы (2 инстанса)**
    - Django веб-приложение
    - uWSGI application server
-   - GFS2 кластерная файловая система для общей статики
+   - NFS для общего хранилища статики (Backend-1 = NFS server, Backend-2 = NFS client)
 
 4. **Database сервер (1 инстанс)**
    - PostgreSQL некластеризованная СУБД
@@ -51,8 +51,8 @@
 - **Application Server**: uWSGI
 - **Framework**: Django 4.2
 - **Database**: PostgreSQL 14
-- **Shared Storage**: GFS2 (Global File System 2) с Pacemaker/Corosync
-- **OS**: Ubuntu 22.04 LTS
+- **Shared Storage**: NFS (Network File System)
+- **OS**: AlmaLinux 9
 
 ## Предварительные требования
 
@@ -120,7 +120,11 @@ cd homework4
 # 2. Настроить переменные Terraform
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
-# Отредактировать terraform.tfvars, указать ваши Cloud ID и Folder ID
+nano terraform.tfvars
+
+# Указать ваши значения:
+# yc_cloud_id  = "ваш-cloud-id"
+# yc_folder_id = "ваш-folder-id"
 
 # 3. Запустить автоматическое развертывание
 cd ..
@@ -212,7 +216,7 @@ cd terraform
 terraform output backend_instances
 
 # SSH на первый backend сервер
-ssh ubuntu@<BACKEND_1_IP>
+ssh almalinux@<BACKEND_1_IP>
 
 # Остановить uWSGI
 sudo systemctl stop uwsgi
@@ -232,7 +236,7 @@ sudo systemctl start uwsgi
 terraform output nginx_instances
 
 # SSH на первый nginx сервер
-ssh ubuntu@<NGINX_1_IP>
+ssh almalinux@<NGINX_1_IP>
 
 # Остановить Nginx
 sudo systemctl stop nginx
@@ -246,28 +250,30 @@ curl http://$LB_IP/health
 sudo systemctl start nginx
 ```
 
-#### 3. Тест GFS2 (общая файловая система)
+#### 3. Тест NFS (общая файловая система)
 
 ```bash
-# SSH на первый backend
-ssh ubuntu@<BACKEND_1_IP>
+# SSH на первый backend (NFS server)
+ssh almalinux@<BACKEND_1_IP>
 
 # Создать тестовый файл в статике
-echo "Test from backend-1" | sudo tee /var/www/static/test.txt
+echo "Test from backend-1 at $(date)" | sudo tee /var/www/static/test.txt
 
-# SSH на второй backend
-ssh ubuntu@<BACKEND_2_IP>
+# SSH на второй backend (NFS client)
+ssh almalinux@<BACKEND_2_IP>
 
-# Проверить наличие файла (GFS2 синхронизация)
+# Проверить наличие файла (NFS синхронизация)
 cat /var/www/static/test.txt
-# Должен вывести: Test from backend-1
+# Должен вывести: Test from backend-1 at ...
 ```
 
 #### 4. Нагрузочное тестирование
 
 ```bash
 # Установить Apache Bench
-sudo apt-get install apache2-utils
+sudo yum install httpd-tools  # AlmaLinux
+# или
+brew install httpd  # macOS
 
 # Запустить нагрузочный тест
 ab -n 1000 -c 10 http://$LB_IP/
@@ -285,7 +291,7 @@ ab -n 1000 -c 10 http://$LB_IP/
 ### Логи Nginx
 
 ```bash
-ssh ubuntu@<NGINX_IP>
+ssh almalinux@<NGINX_IP>
 sudo tail -f /var/log/nginx/webapp_access.log
 sudo tail -f /var/log/nginx/webapp_error.log
 ```
@@ -293,23 +299,28 @@ sudo tail -f /var/log/nginx/webapp_error.log
 ### Логи uWSGI
 
 ```bash
-ssh ubuntu@<BACKEND_IP>
+ssh almalinux@<BACKEND_IP>
 sudo tail -f /var/log/uwsgi/webapp.log
 ```
 
-### Статус кластера GFS2
+### Статус NFS
 
 ```bash
-ssh ubuntu@<BACKEND_IP>
-sudo pcs status
-sudo pcs cluster status
+# На NFS сервере (Backend-1)
+ssh almalinux@<BACKEND_1_IP>
+sudo systemctl status nfs-server
+sudo exportfs -v
+
+# На NFS клиенте (Backend-2)
+ssh almalinux@<BACKEND_2_IP>
+mount | grep nfs
 ```
 
 ### Статус PostgreSQL
 
 ```bash
-ssh ubuntu@<DATABASE_IP>
-sudo systemctl status postgresql
+ssh almalinux@<DATABASE_IP>
+sudo systemctl status postgresql-14
 sudo -u postgres psql -c "\l"  # список баз
 sudo -u postgres psql -c "\du"  # список пользователей
 ```
@@ -319,9 +330,14 @@ sudo -u postgres psql -c "\du"  # список пользователей
 ```
 homework4/
 ├── README.md                      # Этот файл
+├── ARCHITECTURE.md                # Подробное описание архитектуры
+├── QUICKSTART.md                  # Краткая инструкция
+├── TESTING.md                     # Руководство по тестированию
+├── TROUBLESHOOTING.md             # Устранение неполадок
 ├── deploy.sh                      # Скрипт автоматического развертывания
 ├── destroy.sh                     # Скрипт удаления инфраструктуры
 ├── test-failover.sh              # Скрипт тестирования отказоустойчивости
+├── Makefile                       # Удобные команды
 │
 ├── terraform/                     # Terraform конфигурация
 │   ├── versions.tf               # Версии провайдеров
@@ -337,6 +353,8 @@ homework4/
 └── ansible/                       # Ansible конфигурация
     ├── ansible.cfg               # Конфигурация Ansible
     ├── site.yml                  # Главный playbook
+    ├── group_vars/
+    │   └── all.yml              # Глобальные переменные
     │
     └── roles/                    # Ansible роли
         ├── database/             # PostgreSQL
@@ -345,9 +363,10 @@ homework4/
         │   ├── templates/
         │   └── handlers/
         │
-        ├── gfs2/                 # GFS2 кластер
+        ├── nfs/                  # NFS shared storage
         │   ├── defaults/
-        │   └── tasks/
+        │   ├── tasks/
+        │   └── handlers/
         │
         ├── backend/              # Django + uWSGI
         │   ├── defaults/
@@ -368,11 +387,14 @@ homework4/
 2. **Private Network**: Все внутренние коммуникации через приватную сеть
 3. **Database**: Доступна только с backend серверов
 4. **SSH**: Доступ по ключам, без паролей
-5. **Secrets**: Используйте `ansible-vault` для хранения паролей в продакшене
+5. **Firewalld**: Настроен на всех серверах для дополнительной защиты
+6. **SELinux**: В permissive режиме (можно переключить в enforcing после тестирования)
+
+### Рекомендации для production
 
 ```bash
 # Зашифровать чувствительные данные
-ansible-vault encrypt ansible/roles/database/defaults/main.yml
+ansible-vault encrypt ansible/group_vars/all.yml
 
 # Запустить с vault
 ansible-playbook -i inventory.ini site.yml --ask-vault-pass
@@ -399,6 +421,8 @@ terraform output -raw ansible_inventory > inventory.ini
 ansible-playbook -i inventory.ini site.yml
 ```
 
+**Примечание**: При использовании NFS и добавлении более 2 backend серверов, все дополнительные серверы будут NFS клиентами, что является нормальной конфигурацией.
+
 ### Вертикальное масштабирование
 
 Изменить ресурсы VM в `terraform/compute.tf`:
@@ -423,57 +447,42 @@ terraform destroy
 
 ## Возможные проблемы и решения
 
-### 1. Ошибка "quota exceeded"
-
-Проверьте квоты в Yandex Cloud:
-```bash
-yc compute quota list
-```
-
-### 2. Ansible не может подключиться к хостам
-
-Проверьте:
-- SSH ключи добавлены корректно
-- Security groups разрешают SSH (порт 22)
-- Хосты получили внешние IP адреса
-
-```bash
-ansible all -i inventory.ini -m ping -vvv
-```
-
-### 3. GFS2 кластер не запускается
-
-```bash
-# Проверить статус кластера
-sudo pcs status
-
-# Перезапустить кластер
-sudo pcs cluster stop --all
-sudo pcs cluster start --all
-```
-
-### 4. Load Balancer показывает unhealthy targets
-
-Проверьте:
-```bash
-# На Nginx сервере
-curl localhost/health
-
-# Должен вернуть "OK"
-```
+См. подробное руководство в [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## Дополнительная информация
 
 - [Terraform Yandex Provider](https://registry.terraform.io/providers/yandex-cloud/yandex/latest/docs)
 - [Yandex Cloud Network Load Balancer](https://cloud.yandex.ru/docs/network-load-balancer/)
 - [Ansible Documentation](https://docs.ansible.com/)
-- [GFS2 Documentation](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/global_file_system_2/)
+- [NFS Documentation](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/managing_file_systems/exporting-nfs-shares_managing-file-systems)
 - [Django Documentation](https://docs.djangoproject.com/)
 - [uWSGI Documentation](https://uwsgi-docs.readthedocs.io/)
 
+## Технические детали
+
+### NFS вместо GFS2
+
+Изначально планировалось использовать GFS2 (Global File System 2) для кластерного хранилища, но из-за архитектурных ограничений Yandex Cloud (невозможность присоединить один диск к нескольким VM) было принято решение использовать **NFS**.
+
+**Преимущества NFS:**
+- ✅ Работает с существующей инфраструктурой Yandex Cloud
+- ✅ Простота настройки и обслуживания
+- ✅ Production-ready решение
+- ✅ Высокая производительность для статических файлов
+- ✅ Стандарт де-факто для общих хранилищ
+
+**Архитектура NFS:**
+- Backend-1 выступает как NFS сервер
+- Backend-2+ выступают как NFS клиенты
+- Все backend серверы имеют доступ к общей директории `/var/www/static`
+- При отказе Backend-1 (NFS сервера) статика становится недоступна, но это можно решить через:
+  - Использование managed NFS от Yandex Cloud
+  - Настройку NFS HA с DRBD
+  - Использование объектного хранилища (S3)
+
 ## Авторы
 
-OTUS Homework Project
+OTUS Homework 4 - High Availability Web Application
 
 ## Лицензия
 

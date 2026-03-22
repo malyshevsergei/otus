@@ -1,7 +1,7 @@
 ---
 # Nginx role defaults
 
-nginx_user: www-data
+nginx_user: nginx
 nginx_worker_processes: auto
 nginx_worker_connections: 1024
 

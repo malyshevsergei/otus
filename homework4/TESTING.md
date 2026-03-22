@@ -154,7 +154,7 @@ sudo systemctl start uwsgi
 sudo systemctl status uwsgi
 ```
 
-## Тест 4: GFS2 Синхронизация
+## Тест 4: NFS Синхронизация
 
 ### Создание файла на Backend-1
 
@@ -164,10 +164,10 @@ BACKEND_1_IP=$(terraform output -json backend_instances | jq -r '.[0].external_i
 ssh ubuntu@$BACKEND_1_IP
 
 # Создать тестовый файл
-echo "Test from Backend-1 at $(date)" | sudo tee /var/www/static/test-gfs2.txt
+echo "Test from Backend-1 at $(date)" | sudo tee /var/www/static/test-nfs.txt
 
 # Проверить создание
-cat /var/www/static/test-gfs2.txt
+cat /var/www/static/test-nfs.txt
 ```
 
 ### Проверка на Backend-2
@@ -177,8 +177,8 @@ cat /var/www/static/test-gfs2.txt
 BACKEND_2_IP=$(terraform output -json backend_instances | jq -r '.[1].external_ip')
 ssh ubuntu@$BACKEND_2_IP
 
-# Файл должен быть виден немедленно (GFS2)
-cat /var/www/static/test-gfs2.txt
+# Файл должен быть виден немедленно (NFS)
+cat /var/www/static/test-nfs.txt
 # Ожидается: Test from Backend-1 at ...
 ```
 
@@ -186,10 +186,10 @@ cat /var/www/static/test-gfs2.txt
 
 ```bash
 # На Backend-2
-echo "Test from Backend-2 at $(date)" | sudo tee /var/www/static/test-gfs2-2.txt
+echo "Test from Backend-2 at $(date)" | sudo tee /var/www/static/test-nfs-2.txt
 
 # На Backend-1 проверить
-cat /var/www/static/test-gfs2-2.txt
+cat /var/www/static/test-nfs-2.txt
 # Ожидается: Test from Backend-2 at ...
 ```
 
@@ -386,7 +386,7 @@ sudo -u postgres psql -c "SELECT * FROM pg_stat_database WHERE datname='webapp_d
 sudo -u postgres psql -c "SELECT pg_size_pretty(pg_database_size('webapp_db'));"
 ```
 
-### Диск GFS2
+### Диск NFS
 
 ```bash
 # SSH на Backend
@@ -398,8 +398,8 @@ df -h /var/www/static
 # I/O статистика
 sudo iostat -x 1 5
 
-# Статус GFS2
-mount | grep gfs2
+# Статус NFS
+mount | grep nfs
 ```
 
 ## Тест 8: Логирование
@@ -464,7 +464,7 @@ sudo grep "duration:" /var/log/postgresql/postgresql-14-main.log
 - [ ] Отказ двух Nginx - приложение недоступно (ожидаемо)
 - [ ] Отказ одного Backend - приложение работает
 - [ ] Отказ двух Backend - приложение недоступно (ожидаемо)
-- [ ] GFS2 синхронизация работает между Backend серверами
+- [ ] NFS синхронизация работает между Backend серверами
 - [ ] Отказ БД - приложение падает (ожидаемо, single point)
 
 ### Производительность
@@ -478,7 +478,7 @@ sudo grep "duration:" /var/log/postgresql/postgresql-14-main.log
 - [ ] Nginx логи пишутся корректно
 - [ ] uWSGI логи пишутся корректно
 - [ ] PostgreSQL логи доступны
-- [ ] GFS2 кластер в статусе "Online"
+- [ ] NFS сервер в статусе "Active"
 - [ ] Все сервисы в systemd enabled
 
 ## Автоматизированный тест-сюит
@@ -544,7 +544,7 @@ echo "=== Test Suite Completed ==="
 1. Базовая доступность: PASS/FAIL
 2. Nginx failover: PASS/FAIL
 3. Backend failover: PASS/FAIL
-4. GFS2 синхронизация: PASS/FAIL
+4. NFS синхронизация: PASS/FAIL
 5. Database connectivity: PASS/FAIL
 6. Производительность: ___ RPS, ___ ms latency
 

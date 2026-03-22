@@ -1,7 +1,0 @@
----
-# GFS2 role defaults
-
-gfs2_device: "/dev/vdb"
-gfs2_mount_point: "/var/www/static"
-gfs2_cluster_name: "webapp_cluster"
-gfs2_lock_table: "webapp_lock"

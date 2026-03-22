@@ -32,8 +32,8 @@
           │                             │
     ┌─────▼─────┐                 ┌─────▼─────┐
     │ Backend-1 │◄───────────────►│ Backend-2 │
-    │  Django + │   GFS2 Cluster  │  Django + │
-    │   uWSGI   │  Pacemaker/DLM  │   uWSGI   │
+    │  Django + │   NFS Storage  │  Django + │
+    │   uWSGI   │  NFS Client/Server  │   uWSGI   │
     └─────┬─────┘                 └─────┬─────┘
           │                             │
           │      PostgreSQL Protocol    │
@@ -87,7 +87,7 @@
 **Функции:**
 - Выполнение бизнес-логики приложения
 - Обработка HTTP запросов через uWSGI
-- Хранение статических файлов на GFS2
+- Хранение статических файлов на NFS
 - Подключение к базе данных
 
 **Стек:**
@@ -107,9 +107,9 @@
 **Ресурсы VM:**
 - CPU: 2 cores
 - RAM: 4 GB
-- Disk: 30 GB (boot) + 10 GB (GFS2)
+- Disk: 30 GB (boot) + 10 GB (NFS)
 
-### 4. GFS2 Cluster
+### 4. NFS Storage
 
 **Функции:**
 - Общее хранилище для статических файлов
@@ -117,14 +117,13 @@
 - Высокая доступность данных
 
 **Компоненты:**
-- GFS2: Clustered file system
-- DLM: Distributed Lock Manager
-- Pacemaker: Cluster resource manager
-- Corosync: Cluster communication
+- NFS Server: Backend-1 экспортирует /var/www/static
+- NFS Client: Backend-2+ монтируют удаленную файловую систему
 
 **Конфигурация:**
-- Journals: 2 (по количеству backend серверов)
-- Lock table: webapp_cluster:webapp_lock
+- Server: Backend-1 с XFS на /dev/vdb
+- Clients: Backend-2+ монтируют через NFS протокол
+- Export: /var/www/static доступна для 10.0.1.0/24
 - Mount point: /var/www/static
 - Mount options: noatime,nodiratime
 
@@ -177,7 +176,7 @@ VPC: otus-network (10.0.0.0/16)
 - **Ingress:**
   - TCP 8000 (uWSGI) from 10.0.1.0/24
   - TCP 22 (SSH) from 0.0.0.0/0
-  - ANY from 10.0.1.0/24 (internal, для GFS2/Pacemaker)
+  - ANY from 10.0.1.0/24 (internal, для NFS)
 - **Egress:**
   - ANY to 0.0.0.0/0
 
@@ -196,16 +195,16 @@ VPC: otus-network (10.0.0.0/16)
 ```
 User → Load Balancer → Nginx (80) → Backend (8000/uwsgi) → Database (5432)
                                   ↓
-                          Static files (GFS2)
+                          Static files (NFS)
 ```
 
 ### 2. Статические файлы
 
 ```
-User → Load Balancer → Nginx → /var/www/static (GFS2)
+User → Load Balancer → Nginx → /var/www/static (NFS)
 ```
 
-Django collectstatic → Backend → /var/www/static (GFS2) → Sync → Other Backends
+Django collectstatic → Backend → /var/www/static (NFS) → Sync → Other Backends
 
 ### 3. Данные приложения
 
@@ -239,13 +238,13 @@ Backend-1 → PostgreSQL ← Backend-2
 
 **RTO:** ~30-90 секунд (3 failed requests × 30s timeout)
 
-### Сценарий 3: GFS2 проблемы
+### Сценарий 3: NFS проблемы
 
 ```
-1. Один из backend серверов теряет доступ к GFS2
-2. DLM и Pacemaker управляют блокировками
+1. Один из backend серверов (клиент) теряет доступ к NFS
+2. NFS автоматически восстанавливает соединение
 3. Другой backend продолжает работать
-4. Статические файлы доступны
+4. Статические файлы доступны через NFS сервер
 ```
 
 **RTO:** ~0 секунд (автоматическая синхронизация)
@@ -277,8 +276,8 @@ Backend-1 → PostgreSQL ← Backend-2
 
 #### Backend слой
 - Масштабируется до N серверов
-- GFS2 поддерживает до 16 узлов
-- Требует настройки количества журналов GFS2
+- NFS поддерживает до 16 узлов
+- Требует настройки количества журналов NFS
 
 #### Database слой
 - Масштабирование через Read Replicas
@@ -323,7 +322,7 @@ Backend-1 → PostgreSQL ← Backend-2
 - Disk I/O
 - Replication lag (если есть)
 
-#### GFS2
+#### NFS
 - Cluster status
 - Lock contention
 - I/O throughput
@@ -410,7 +409,7 @@ Backend-1 → PostgreSQL ← Backend-2
    # Настроить WAL archiving
    ```
 
-2. **Статические файлы (GFS2):**
+2. **Статические файлы (NFS):**
    ```bash
    # Snapshot дисков в Yandex Cloud
    yc compute disk create-snapshot

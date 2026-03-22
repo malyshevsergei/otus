@@ -7,8 +7,6 @@ User={{ app_user }}
 Group={{ app_group }}
 WorkingDirectory={{ app_dir }}
 Environment="PATH={{ app_dir }}/venv/bin"
-ExecStartPre=/bin/mkdir -p /var/log/uwsgi
-ExecStartPre=/bin/chown {{ app_user }}:{{ app_group }} /var/log/uwsgi
 ExecStart={{ app_dir }}/venv/bin/uwsgi --ini {{ app_dir }}/uwsgi.ini
 Restart=always
 RestartSec=10

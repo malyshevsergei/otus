@@ -1,0 +1,143 @@
+---
+# Shared storage setup using NFS (reliable alternative for Yandex Cloud)
+
+- name: Install firewalld and dependencies
+  yum:
+    name:
+      - firewalld
+      - python3-firewall
+    state: present
+
+- name: Ensure firewalld is running
+  service:
+    name: firewalld
+    state: started
+    enabled: yes
+
+# NFS Server setup (on first backend node)
+- name: Install NFS server
+  yum:
+    name:
+      - nfs-utils
+    state: present
+  when: inventory_hostname == groups['backend'][0]
+
+# NFS Client setup (on other backend nodes)
+- name: Install NFS client
+  yum:
+    name:
+      - nfs-utils
+    state: present
+  when: inventory_hostname != groups['backend'][0]
+
+- name: Create mount point
+  file:
+    path: "{{ nfs_mount_point }}"
+    state: directory
+    mode: '0755'
+
+# Server: Format and mount the additional disk
+- name: Check if device is already mounted
+  shell: "mount | grep {{ nfs_device }}"
+  register: device_mounted
+  failed_when: false
+  changed_when: false
+  when: inventory_hostname == groups['backend'][0]
+
+- name: Check if device has a filesystem
+  shell: "blkid {{ nfs_device }}"
+  register: device_has_fs
+  failed_when: false
+  changed_when: false
+  when: inventory_hostname == groups['backend'][0]
+
+- name: Format additional disk on NFS server (only if not formatted)
+  filesystem:
+    fstype: xfs
+    dev: "{{ nfs_device }}"
+  when:
+    - inventory_hostname == groups['backend'][0]
+    - device_has_fs.rc != 0
+
+- name: Mount additional disk on NFS server
+  mount:
+    path: "{{ nfs_mount_point }}"
+    src: "{{ nfs_device }}"
+    fstype: xfs
+    opts: defaults
+    state: mounted
+  when: inventory_hostname == groups['backend'][0]
+
+- name: Set permissions on shared storage (server)
+  file:
+    path: "{{ nfs_mount_point }}"
+    mode: '0755'
+    state: directory
+  when: inventory_hostname == groups['backend'][0]
+
+# Server: Configure NFS exports
+- name: Configure NFS exports
+  lineinfile:
+    path: /etc/exports
+    line: "{{ nfs_mount_point }} 10.0.1.0/24(rw,sync,no_subtree_check,no_root_squash)"
+    create: yes
+  when: inventory_hostname == groups['backend'][0]
+  notify: restart nfs
+
+- name: Export NFS shares
+  command: exportfs -ra
+  when: inventory_hostname == groups['backend'][0]
+
+- name: Configure firewall for NFS
+  firewalld:
+    service: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    - nfs
+    - rpc-bind
+    - mountd
+  when: inventory_hostname == groups['backend'][0]
+  ignore_errors: yes
+
+- name: Ensure NFS server is running
+  service:
+    name: nfs-server
+    state: started
+    enabled: yes
+  when: inventory_hostname == groups['backend'][0]
+
+# Clients: Mount NFS share
+- name: Wait for NFS server to be ready
+  wait_for:
+    host: "{{ hostvars[groups['backend'][0]]['internal_ip'] }}"
+    port: 2049
+    timeout: 60
+  when: inventory_hostname != groups['backend'][0]
+
+- name: Mount NFS share on clients
+  mount:
+    path: "{{ nfs_mount_point }}"
+    src: "{{ hostvars[groups['backend'][0]]['internal_ip'] }}:{{ nfs_mount_point }}"
+    fstype: nfs
+    opts: defaults,_netdev
+    state: mounted
+  when: inventory_hostname != groups['backend'][0]
+
+- name: Verify shared storage is accessible
+  file:
+    path: "{{ nfs_mount_point }}/test"
+    state: touch
+  when: inventory_hostname == groups['backend'][0]
+
+- name: Verify test file on client
+  stat:
+    path: "{{ nfs_mount_point }}/test"
+  register: test_file
+  when: inventory_hostname != groups['backend'][0]
+
+- name: Display NFS status
+  debug:
+    msg: "NFS shared storage is working! Test file {{ 'exists' if test_file.stat.exists | default(false) else 'NOT found' }}"
+  when: inventory_hostname != groups['backend'][0]

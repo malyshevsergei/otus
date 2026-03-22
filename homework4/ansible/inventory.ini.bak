@@ -1,0 +1,14 @@
+[nginx]
+nginx-1 ansible_host=158.160.62.176 ansible_user=ubuntu internal_ip=10.0.1.7
+nginx-2 ansible_host=158.160.48.64 ansible_user=ubuntu internal_ip=10.0.1.15
+
+[backend]
+backend-1 ansible_host=89.169.136.59 ansible_user=ubuntu internal_ip=10.0.1.35
+backend-2 ansible_host=93.77.183.252 ansible_user=ubuntu internal_ip=10.0.1.30
+
+[database]
+database ansible_host=93.77.177.205 ansible_user=ubuntu internal_ip=10.0.1.29
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'

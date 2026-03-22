@@ -7,12 +7,13 @@
   roles:
     - database
 
-- name: Setup Backend Servers with GFS2
+- name: Setup Backend Servers with NFS
   hosts: backend
   become: yes
   roles:
-    - gfs2
+    - nfs
     - backend
+  tags: backend
 
 - name: Setup Nginx Load Balancers
   hosts: nginx

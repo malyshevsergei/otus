@@ -10,19 +10,17 @@ db_port: "5432"
 
 # Application settings
 app_name: "webapp"
-app_user: "www-data"
-app_group: "www-data"
+app_user: "nginx"
+app_group: "nginx"
 
 # Django settings
 django_secret_key: "django-insecure-change-me-in-production"
 django_debug: "False"
 django_allowed_hosts: "*"
 
-# GFS2 settings
-gfs2_device: "/dev/vdb"
-gfs2_mount_point: "/var/www/static"
-gfs2_cluster_name: "webapp_cluster"
-gfs2_lock_table: "webapp_lock"
+# NFS settings
+nfs_device: "/dev/vdb"
+nfs_mount_point: "/var/www/static"
 
 # Static and media paths
 static_dir: "/var/www/static"

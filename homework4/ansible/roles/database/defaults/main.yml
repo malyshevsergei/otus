@@ -1,6 +1,7 @@
 ---
 # Database role defaults
 
+# PostgreSQL version (auto-detected during installation)
 postgresql_version: "14"
 postgresql_listen_addresses: "*"
 postgresql_max_connections: 100
