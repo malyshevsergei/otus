@@ -1,0 +1,37 @@
+[uwsgi]
+# Django application
+chdir = {{ app_dir }}
+module = {{ app_name }}.wsgi:application
+home = {{ app_dir }}/venv
+env = DJANGO_SETTINGS_MODULE={{ app_name }}.settings
+
+# Process management
+master = true
+processes = {{ uwsgi_processes }}
+threads = {{ uwsgi_threads }}
+harakiri = 60
+max-requests = 5000
+vacuum = true
+
+# Networking
+socket = {{ uwsgi_socket }}
+chmod-socket = 666
+protocol = uwsgi
+
+# Logging
+logto = /var/log/uwsgi/{{ app_name }}.log
+log-maxsize = 10000000
+log-backupname = /var/log/uwsgi/{{ app_name }}.log.old
+
+# User and group
+uid = {{ app_user }}
+gid = {{ app_group }}
+
+# Enable threading
+enable-threads = true
+single-interpreter = true
+lazy-apps = true
+
+# Performance
+thunder-lock = true
+buffer-size = 32768

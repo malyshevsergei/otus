@@ -1,0 +1,138 @@
+---
+# ── 1. Packages ───────────────────────────────────────────────────────────────
+- name: Install Nginx, PHP 8.1 and required extensions
+  apt:
+    name:
+      - nginx
+      - php8.1-fpm
+      - php8.1-mysql
+      - php8.1-xml
+      - php8.1-zip
+      - php8.1-gd
+      - php8.1-mbstring
+      - php8.1-curl
+      - php8.1-intl
+      - php8.1-bcmath
+      - unzip
+    state: present
+    update_cache: yes
+
+# ── 2. Joomla source ─────────────────────────────────────────────────────────
+- name: Create Joomla document root
+  file:
+    path: "{{ joomla_root }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+
+- name: Download Joomla {{ joomla_version }}
+  get_url:
+    url: "https://github.com/joomla/joomla-cms/releases/download/{{ joomla_version }}/Joomla_{{ joomla_version }}-Stable-Full_Package.zip"
+    dest: "/tmp/joomla-{{ joomla_version }}.zip"
+    mode: "0644"
+    timeout: 120
+
+- name: Check if Joomla files are already extracted
+  stat:
+    path: "{{ joomla_root }}/index.php"
+  register: joomla_extracted
+
+- name: Extract Joomla archive
+  unarchive:
+    src: "/tmp/joomla-{{ joomla_version }}.zip"
+    dest: "{{ joomla_root }}"
+    remote_src: yes
+    owner: www-data
+    group: www-data
+  when: not joomla_extracted.stat.exists
+
+# ── 3. CLI install (runs once from first backend, initialises the DB) ─────────
+- name: Check if Joomla is already installed (configuration.php present)
+  stat:
+    path: "{{ joomla_root }}/configuration.php"
+  register: joomla_config
+  run_once: true
+  delegate_to: "{{ groups['backends'][0] }}"
+
+- name: Run Joomla CLI installer
+  command:
+    cmd: >
+      php installation/joomla.php install -n
+      --site-name="{{ joomla_site_name }}"
+      --admin-user="{{ joomla_admin_user }}"
+      --admin-username="{{ joomla_admin_user }}"
+      --admin-password="{{ joomla_admin_pass }}"
+      --admin-email="{{ joomla_admin_email }}"
+      --db-type=mysqli
+      --db-host="{{ db_host }}"
+      --db-name="{{ db_name }}"
+      --db-user="{{ db_user }}"
+      --db-pass="{{ db_password }}"
+      --db-prefix="{{ joomla_db_prefix }}"
+    chdir: "{{ joomla_root }}"
+  run_once: true
+  delegate_to: "{{ groups['backends'][0] }}"
+  when: not joomla_config.stat.exists
+
+# ── 4. Deploy configuration.php from template to ALL backends ─────────────────
+# Overwrites whatever the CLI installer created; ensures identical config
+# on every node (same $secret, DB sessions enabled for true round-robin).
+- name: Deploy Joomla configuration.php
+  template:
+    src: configuration.php.j2
+    dest: "{{ joomla_root }}/configuration.php"
+    owner: www-data
+    group: www-data
+    mode: "0640"
+
+# ── 5. Remove installation directory ─────────────────────────────────────────
+- name: Remove Joomla installation directory
+  file:
+    path: "{{ joomla_root }}/installation"
+    state: absent
+
+# ── 6. Fix ownership ─────────────────────────────────────────────────────────
+- name: Set correct ownership on Joomla root
+  file:
+    path: "{{ joomla_root }}"
+    state: directory
+    recurse: yes
+    owner: www-data
+    group: www-data
+
+# ── 7. Nginx virtual host ─────────────────────────────────────────────────────
+- name: Remove default Nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Deploy Joomla Nginx vhost
+  template:
+    src: joomla.conf.j2
+    dest: /etc/nginx/sites-available/joomla.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Enable Joomla Nginx vhost
+  file:
+    src: /etc/nginx/sites-available/joomla.conf
+    dest: /etc/nginx/sites-enabled/joomla.conf
+    state: link
+  notify: reload nginx
+
+# ── 8. Services ───────────────────────────────────────────────────────────────
+- name: Ensure php8.1-fpm is started and enabled
+  service:
+    name: php8.1-fpm
+    state: started
+    enabled: yes
+
+- name: Ensure Nginx is started and enabled
+  service:
+    name: nginx
+    state: started
+    enabled: yes

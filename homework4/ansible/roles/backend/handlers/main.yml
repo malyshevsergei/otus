@@ -1,0 +1,11 @@
+---
+# Backend handlers
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart uwsgi
+  service:
+    name: uwsgi
+    state: restarted

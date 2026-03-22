@@ -1,0 +1,121 @@
+---
+# Backend (Django + uWSGI) installation and configuration
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install Python and dependencies
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - build-essential
+      - libpq-dev
+      - git
+    state: present
+
+- name: Create application directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create media directory
+  file:
+    path: "{{ media_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create Python virtual environment
+  command: python3 -m venv "{{ app_dir }}/venv"
+  args:
+    creates: "{{ app_dir }}/venv"
+  become_user: "{{ app_user }}"
+
+- name: Upgrade pip in virtualenv
+  pip:
+    name: pip
+    state: latest
+    virtualenv: "{{ app_dir }}/venv"
+  become_user: "{{ app_user }}"
+
+- name: Install Django and dependencies
+  pip:
+    name:
+      - Django==4.2
+      - uwsgi
+      - psycopg2-binary
+      - python-decouple
+    virtualenv: "{{ app_dir }}/venv"
+  become_user: "{{ app_user }}"
+
+- name: Check if Django project exists
+  stat:
+    path: "{{ app_dir }}/{{ app_name }}"
+  register: django_project
+
+- name: Create Django project
+  command: "{{ app_dir }}/venv/bin/django-admin startproject {{ app_name }} {{ app_dir }}"
+  when: not django_project.stat.exists
+  become_user: "{{ app_user }}"
+
+- name: Configure Django settings
+  template:
+    src: settings.py.j2
+    dest: "{{ app_dir }}/{{ app_name }}/settings.py"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+  notify: restart uwsgi
+
+- name: Create .env file
+  template:
+    src: env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0600'
+
+- name: Run Django migrations
+  command: "{{ app_dir }}/venv/bin/python {{ app_dir }}/manage.py migrate --noinput"
+  become_user: "{{ app_user }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_name }}.settings"
+
+- name: Collect static files
+  command: "{{ app_dir }}/venv/bin/python {{ app_dir }}/manage.py collectstatic --noinput"
+  become_user: "{{ app_user }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_name }}.settings"
+
+- name: Create uWSGI configuration
+  template:
+    src: uwsgi.ini.j2
+    dest: "{{ app_dir }}/uwsgi.ini"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+  notify: restart uwsgi
+
+- name: Create uWSGI systemd service
+  template:
+    src: uwsgi.service.j2
+    dest: /etc/systemd/system/uwsgi.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart uwsgi
+
+- name: Enable and start uWSGI service
+  service:
+    name: uwsgi
+    state: started
+    enabled: yes

@@ -1,0 +1,8 @@
+upstream backends {
+{% if lb_method == "hash" %}
+    ip_hash;
+{% endif %}
+{% for server in backend_servers %}
+    server {{ server.host }}:{{ server.port }};
+{% endfor %}
+}

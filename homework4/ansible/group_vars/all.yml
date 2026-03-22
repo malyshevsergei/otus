@@ -1,0 +1,29 @@
+---
+# Global variables for all hosts
+
+# Database connection (shared across backend servers)
+db_host: "{{ hostvars[groups['database'][0]]['internal_ip'] }}"
+db_name: "webapp_db"
+db_user: "webapp_user"
+db_password: "changeme_secure_password"  # Change this in production!
+db_port: "5432"
+
+# Application settings
+app_name: "webapp"
+app_user: "www-data"
+app_group: "www-data"
+
+# Django settings
+django_secret_key: "django-insecure-change-me-in-production"
+django_debug: "False"
+django_allowed_hosts: "*"
+
+# GFS2 settings
+gfs2_device: "/dev/vdb"
+gfs2_mount_point: "/var/www/static"
+gfs2_cluster_name: "webapp_cluster"
+gfs2_lock_table: "webapp_lock"
+
+# Static and media paths
+static_dir: "/var/www/static"
+media_dir: "/var/www/media"

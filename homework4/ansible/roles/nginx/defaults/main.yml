@@ -1,0 +1,13 @@
+---
+# Nginx role defaults
+
+nginx_user: www-data
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+
+# Upstream backend servers
+backend_servers: "{{ groups['backend'] }}"
+
+# Static files location
+static_root: "/var/www/static"
+media_root: "/var/www/media"

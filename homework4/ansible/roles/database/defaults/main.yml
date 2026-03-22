@@ -1,0 +1,15 @@
+---
+# Database role defaults
+
+postgresql_version: "14"
+postgresql_listen_addresses: "*"
+postgresql_max_connections: 100
+
+# Database configuration
+db_name: "webapp_db"
+db_user: "webapp_user"
+db_password: "changeme_secure_password"
+
+# Allowed hosts for remote connections
+allowed_hosts:
+  - "10.0.1.0/24"

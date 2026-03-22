@@ -1,0 +1,80 @@
+<?php
+class JConfig {
+    public $offline = false;
+    public $offline_message = 'This site is down for maintenance.<br>Please check back again soon.';
+    public $display_offline_message = 1;
+    public $offline_image = '';
+    public $sitename = '{{ joomla_site_name }}';
+    public $editor = 'tinymce';
+    public $captcha = '0';
+    public $list_limit = 20;
+    public $access = 1;
+    public $debug = false;
+    public $debug_lang = false;
+    public $debug_lang_const = true;
+
+    /* Database */
+    public $dbtype = 'mysqli';
+    public $host = '{{ db_host }}';
+    public $user = '{{ db_user }}';
+    public $password = '{{ db_password }}';
+    public $db = '{{ db_name }}';
+    public $dbprefix = '{{ joomla_db_prefix }}';
+    public $dbencryption = 0;
+    public $dbsslverifyservercert = false;
+    public $dbsslkey = '';
+    public $dbsslcert = '';
+    public $dbsslca = '';
+    public $dbsslcipher = '';
+
+    /* Security */
+    public $force_ssl = 0;
+    public $live_site = '';
+    public $secret = '{{ joomla_secret }}';
+
+    /* Sessions — stored in DB so any backend can serve any session */
+    public $lifetime = 15;
+    public $session_handler = 'database';
+    public $shared_session = false;
+    public $session_metadata = true;
+
+    /* Mail */
+    public $mailonline = false;
+    public $mailer = 'mail';
+    public $mailfrom = '{{ joomla_admin_email }}';
+    public $fromname = '{{ joomla_site_name }}';
+    public $sendmail = '/usr/sbin/sendmail';
+    public $smtpauth = false;
+    public $smtpuser = '';
+    public $smtppass = '';
+    public $smtphost = 'localhost';
+    public $smtpssl = '0';
+    public $smtpport = 25;
+
+    /* Cache */
+    public $caching = '0';
+    public $cache_platformprefix = false;
+    public $cache_handler = 'file';
+    public $cachetime = 15;
+    public $cache_minify = false;
+
+    /* SEO */
+    public $sef = true;
+    public $sef_rewrite = false;
+    public $sef_suffix = false;
+    public $unicodeslugs = false;
+
+    /* Misc */
+    public $gzip = false;
+    public $error_reporting = 'default';
+    public $helpurl = 'https://help.joomla.org/proxy?keyref=Help{major}{minor}:{keyref}&lang={langcode}';
+    public $offset = 'UTC';
+    public $feed_limit = 10;
+    public $feed_email = 'none';
+    public $MetaDesc = '';
+    public $MetaAuthor = true;
+    public $MetaVersion = false;
+    public $robots = '';
+    public $log_path = '{{ joomla_root }}/administrator/logs';
+    public $tmp_path = '{{ joomla_root }}/tmp';
+}

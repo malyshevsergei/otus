@@ -1,0 +1,36 @@
+---
+# ── Load balancer ─────────────────────────────────────────────────────────────
+# Backend servers that the LB proxies to (private IPs)
+backend_servers:
+  - host: "10.0.0.11"
+    port: 80
+  - host: "10.0.0.12"
+    port: 80
+
+# Which balancing method to activate: "roundrobin" or "hash"
+# round-robin is Nginx default (no directive needed); hash uses ip_hash
+lb_method: "roundrobin"
+
+# Port the LB listens on
+lb_port: 80
+
+# ── Database (MariaDB on 10.0.0.20) ──────────────────────────────────────────
+db_host: "10.0.0.20"
+db_name: "joomla"
+db_user: "joomla"
+db_password: "JoomlaDB123!"
+
+# ── Joomla ────────────────────────────────────────────────────────────────────
+joomla_version: "5.2.3"
+joomla_root: "/var/www/joomla"
+
+joomla_site_name: "Joomla Cluster"
+joomla_admin_user: "admin"
+joomla_admin_pass: "Admin1234!567"
+joomla_admin_email: "admin@example.com"
+
+joomla_db_prefix: "jos_"
+
+# Must be the same on all backends — sessions are stored in DB so
+# any backend can serve any request without sticky sessions.
+joomla_secret: "s3cr3tK3y4J00ml4ClustER"

@@ -1,0 +1,75 @@
+# Upstream backend servers
+upstream backend_servers {
+    least_conn;
+{% for backend_host in backend_servers %}
+    server {{ hostvars[backend_host]['internal_ip'] }}:8000 max_fails=3 fail_timeout=30s;
+{% endfor %}
+}
+
+# Rate limiting
+limit_req_zone $binary_remote_addr zone=webapp_limit:10m rate=10r/s;
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name _;
+
+    client_max_body_size 100M;
+
+    # Access and error logs
+    access_log /var/log/nginx/webapp_access.log;
+    error_log /var/log/nginx/webapp_error.log;
+
+    # Health check endpoint for load balancer
+    location /health {
+        root /usr/share/nginx/html;
+        access_log off;
+    }
+
+    # Static files
+    location /static/ {
+        alias {{ static_root }}/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Media files
+    location /media/ {
+        alias {{ media_root }}/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    # Proxy to backend application
+    location / {
+        limit_req zone=webapp_limit burst=20 nodelay;
+
+        include uwsgi_params;
+        uwsgi_pass backend_servers;
+
+        uwsgi_connect_timeout 60s;
+        uwsgi_send_timeout 60s;
+        uwsgi_read_timeout 60s;
+
+        # Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Buffering
+        uwsgi_buffering on;
+        uwsgi_buffer_size 8k;
+        uwsgi_buffers 8 8k;
+        uwsgi_busy_buffers_size 16k;
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}
