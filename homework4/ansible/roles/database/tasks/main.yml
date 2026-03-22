@@ -1,28 +1,51 @@
 ---
-# PostgreSQL installation and configuration
+# PostgreSQL installation and configuration (AlmaLinux)
 
-- name: Update apt cache
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
+- name: Install PostgreSQL repository
+  yum:
+    name: https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    state: present
+    disable_gpg_check: yes
+
+- name: Disable built-in PostgreSQL module
+  command: dnf -qy module disable postgresql
+  changed_when: false
 
 - name: Install PostgreSQL and dependencies
-  apt:
+  yum:
     name:
-      - postgresql
-      - postgresql-contrib
+      - postgresql14-server
+      - postgresql14-contrib
       - python3-psycopg2
     state: present
 
+- name: Check if PostgreSQL is initialized
+  stat:
+    path: /var/lib/pgsql/14/data/PG_VERSION
+  register: pg_initialized
+
+- name: Initialize PostgreSQL database
+  command: /usr/pgsql-14/bin/postgresql-14-setup initdb
+  when: not pg_initialized.stat.exists
+
 - name: Ensure PostgreSQL is running
   service:
-    name: postgresql
+    name: postgresql-14
     state: started
     enabled: yes
 
+- name: Detect PostgreSQL version
+  shell: psql --version | grep -oP '\d+' | head -1
+  register: pg_version_detect
+  changed_when: false
+
+- name: Set PostgreSQL version fact
+  set_fact:
+    postgresql_version: "{{ pg_version_detect.stdout }}"
+
 - name: Configure PostgreSQL to listen on all interfaces
   lineinfile:
-    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    path: "/var/lib/pgsql/{{ postgresql_version }}/data/postgresql.conf"
     regexp: "^#?listen_addresses"
     line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
     state: present
@@ -31,7 +54,7 @@
 - name: Configure PostgreSQL authentication
   template:
     src: pg_hba.conf.j2
-    dest: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+    dest: "/var/lib/pgsql/{{ postgresql_version }}/data/pg_hba.conf"
     owner: postgres
     group: postgres
     mode: '0640'
@@ -47,16 +70,46 @@
   postgresql_user:
     name: "{{ db_user }}"
     password: "{{ db_password }}"
-    db: "{{ db_name }}"
-    priv: ALL
     state: present
   become_user: postgres
 
-- name: Grant privileges to user
+- name: Grant database privileges to user
   postgresql_privs:
     database: "{{ db_name }}"
     roles: "{{ db_user }}"
     privs: ALL
     type: database
+    state: present
+  become_user: postgres
+
+- name: Grant schema privileges to user
+  postgresql_privs:
+    database: "{{ db_name }}"
+    roles: "{{ db_user }}"
+    privs: ALL
+    type: schema
+    objs: public
+    state: present
+  become_user: postgres
+
+- name: Grant table privileges to user
+  postgresql_privs:
+    database: "{{ db_name }}"
+    roles: "{{ db_user }}"
+    privs: ALL
+    type: table
+    objs: ALL_IN_SCHEMA
+    schema: public
+    state: present
+  become_user: postgres
+
+- name: Grant sequence privileges to user
+  postgresql_privs:
+    database: "{{ db_name }}"
+    roles: "{{ db_user }}"
+    privs: ALL
+    type: sequence
+    objs: ALL_IN_SCHEMA
+    schema: public
     state: present
   become_user: postgres

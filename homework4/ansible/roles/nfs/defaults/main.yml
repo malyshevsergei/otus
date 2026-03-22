@@ -1,0 +1,5 @@
+---
+# NFS role defaults
+
+nfs_device: "/dev/vdb"
+nfs_mount_point: "/var/www/static"

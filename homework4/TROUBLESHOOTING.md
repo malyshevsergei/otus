@@ -419,9 +419,9 @@ GRANT ALL PRIVILEGES ON DATABASE webapp_db TO webapp_user;
 \q
 ```
 
-### GFS2 Cluster
+### NFS Storage
 
-#### Проблема: GFS2 не монтируется
+#### Проблема: NFS диск не монтируется
 
 **Симптомы:**
 ```
@@ -433,79 +433,81 @@ mount: wrong fs type, bad option, bad superblock on /dev/vdb
 # Проверить, что диск существует
 lsblk | grep vdb
 
-# Проверить, что GFS2 создан
+# Проверить, что диск отформатирован
 sudo blkid /dev/vdb
 
-# Проверить статус кластера
-sudo pcs status
+# Проверить статус NFS сервера
+sudo systemctl status nfs-server
 ```
 
 **Решение:**
 ```bash
-# Если кластер не запущен
-sudo pcs cluster start --all
+# Если NFS сервер не запущен (на Backend-1)
+sudo systemctl start nfs-server
 
-# Если GFS2 не создан
-sudo mkfs.gfs2 -O -j2 -p lock_dlm -t webapp_cluster:webapp_lock /dev/vdb
+# Если диск не отформатирован
+sudo mkfs.xfs /dev/vdb
 
-# Примонтировать
-sudo mount -t gfs2 /dev/vdb /var/www/static
+# Примонтировать на NFS сервере (Backend-1)
+sudo mount /dev/vdb /var/www/static
+
+# Примонтировать на NFS клиенте (Backend-2)
+sudo mount -t nfs <BACKEND_1_IP>:/var/www/static /var/www/static
 ```
 
-#### Проблема: Pacemaker кластер не запускается
+#### Проблема: NFS сервер не запускается
 
 **Симптомы:**
 ```
-sudo pcs status
-Error: cluster is not currently running on this node
+sudo systemctl status nfs-server
+Failed to start NFS server
 ```
 
 **Диагностика:**
 ```bash
-# Проверить статус служб
-sudo systemctl status pacemaker
-sudo systemctl status corosync
-sudo systemctl status pcsd
+# Проверить статус NFS сервера (на Backend-1)
+sudo systemctl status nfs-server
+
+# Проверить exports
+sudo exportfs -v
 
 # Логи
-sudo journalctl -u pacemaker -n 50
-sudo journalctl -u corosync -n 50
+sudo journalctl -u nfs-server -n 50
 ```
 
 **Решение:**
 ```bash
-# Остановить кластер на всех узлах
-sudo pcs cluster stop --all
+# Перезапустить NFS сервер
+sudo systemctl restart nfs-server
 
-# Запустить заново
-sudo pcs cluster start --all
+# Проверить и переэкспортировать
+sudo exportfs -ra
 
-# Если не помогает - пересоздать кластер
-sudo pcs cluster destroy
-sudo pcs cluster setup webapp_cluster backend-1 backend-2 --force
-sudo pcs cluster start --all
-sudo pcs cluster enable --all
+# Проверить firewall
+sudo firewall-cmd --list-services
 ```
 
-#### Проблема: Split-brain в кластере
+#### Проблема: NFS клиент не может подключиться
 
 **Симптомы:**
 ```
-sudo pcs status
-# Показывает конфликтующее состояние узлов
+mount.nfs: Connection timed out
 ```
 
 **Решение:**
 ```bash
-# Остановить кластер
-sudo pcs cluster stop --all
+# На Backend-1 (сервер) проверить:
+sudo systemctl status nfs-server
+sudo exportfs -v
+sudo firewall-cmd --list-services | grep nfs
 
-# Очистить состояние
-sudo pcs cluster sync
-sudo pcs resource cleanup
+# На Backend-2 (клиент):
+# Проверить доступность NFS сервера
+showmount -e <BACKEND_1_IP>
 
-# Запустить
-sudo pcs cluster start --all
+# Перемонтировать
+sudo umount /var/www/static
+sudo mount -t nfs <BACKEND_1_IP>:/var/www/static /var/www/static
 ```
 
 ### Load Balancer
@@ -568,8 +570,8 @@ ssh ubuntu@<BACKEND_IP> '
   echo "=== Django Check ==="
   cd /opt/webapp && source venv/bin/activate && python manage.py check
   echo ""
-  echo "=== GFS2 Mount ==="
-  mount | grep gfs2
+  echo "=== NFS Mount ==="
+  mount | grep nfs
   echo ""
   echo "=== Cluster Status ==="
   sudo pcs status

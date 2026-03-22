@@ -1,46 +1,76 @@
 ---
-# Nginx installation and configuration
+# Nginx installation and configuration (AlmaLinux)
 
-- name: Update apt cache
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
+- name: Install EPEL repository
+  yum:
+    name: epel-release
+    state: present
 
-- name: Install Nginx
-  apt:
+- name: Install Nginx and firewalld
+  yum:
     name:
       - nginx
+      - firewalld
+      - python3-firewall
     state: present
+
+- name: Ensure firewalld is running
+  service:
+    name: firewalld
+    state: started
+    enabled: yes
+
+- name: Configure firewall for HTTP
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+
+- name: Configure firewall for HTTPS
+  firewalld:
+    service: https
+    permanent: yes
+    state: enabled
+    immediate: yes
 
 - name: Remove default Nginx configuration
   file:
-    path: /etc/nginx/sites-enabled/default
+    path: /etc/nginx/conf.d/default.conf
     state: absent
   notify: restart nginx
 
 - name: Create Nginx configuration for webapp
   template:
     src: webapp.conf.j2
-    dest: /etc/nginx/sites-available/webapp.conf
+    dest: /etc/nginx/conf.d/webapp.conf
     owner: root
     group: root
     mode: '0644'
   notify: restart nginx
 
-- name: Enable webapp site
+- name: Create directory for health check
   file:
-    src: /etc/nginx/sites-available/webapp.conf
-    dest: /etc/nginx/sites-enabled/webapp.conf
-    state: link
-  notify: restart nginx
+    path: /usr/share/nginx/html
+    state: directory
+    owner: "{{ nginx_user }}"
+    group: "{{ nginx_user }}"
+    mode: '0755'
 
 - name: Create health check endpoint
   copy:
-    dest: /var/www/html/health
+    dest: /usr/share/nginx/html/health
     content: "OK"
     owner: "{{ nginx_user }}"
     group: "{{ nginx_user }}"
     mode: '0644'
+
+- name: Configure SELinux to allow Nginx to connect to network
+  seboolean:
+    name: httpd_can_network_connect
+    state: yes
+    persistent: yes
+  ignore_errors: yes
 
 - name: Ensure Nginx is started and enabled
   service:

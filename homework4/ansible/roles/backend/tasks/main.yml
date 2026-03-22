@@ -1,20 +1,35 @@
 ---
-# Backend (Django + uWSGI) installation and configuration
+# Backend (Django + uWSGI) installation and configuration (AlmaLinux)
 
-- name: Update apt cache
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
+- name: Create nginx user and group
+  user:
+    name: nginx
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+
+- name: Configure firewall for uWSGI port
+  firewalld:
+    port: 8000/tcp
+    permanent: yes
+    state: enabled
+    immediate: yes
+  ignore_errors: yes
+
+- name: Install EPEL repository
+  yum:
+    name: epel-release
+    state: present
 
 - name: Install Python and dependencies
-  apt:
+  yum:
     name:
       - python3
       - python3-pip
-      - python3-venv
-      - python3-dev
-      - build-essential
-      - libpq-dev
+      - python3-devel
+      - gcc
+      - postgresql-devel
       - git
     state: present
 
@@ -51,23 +66,33 @@
   pip:
     name:
       - Django==4.2
+      - wagtail==5.2
       - uwsgi
       - psycopg2-binary
       - python-decouple
+      - Pillow
     virtualenv: "{{ app_dir }}/venv"
   become_user: "{{ app_user }}"
 
-- name: Check if Django project exists
-  stat:
+- name: Remove old Django project directory if exists
+  file:
     path: "{{ app_dir }}/{{ app_name }}"
-  register: django_project
+    state: absent
 
-- name: Create Django project
-  command: "{{ app_dir }}/venv/bin/django-admin startproject {{ app_name }} {{ app_dir }}"
-  when: not django_project.stat.exists
-  become_user: "{{ app_user }}"
+- name: Remove old manage.py if exists
+  file:
+    path: "{{ app_dir }}/manage.py"
+    state: absent
 
-- name: Configure Django settings
+- name: Create Django project directory
+  file:
+    path: "{{ app_dir }}/{{ app_name }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create Django settings.py
   template:
     src: settings.py.j2
     dest: "{{ app_dir }}/{{ app_name }}/settings.py"
@@ -75,6 +100,106 @@
     group: "{{ app_group }}"
     mode: '0644'
   notify: restart uwsgi
+
+- name: Create Django __init__.py
+  file:
+    path: "{{ app_dir }}/{{ app_name }}/__init__.py"
+    state: touch
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+
+- name: Create Django wsgi.py
+  copy:
+    dest: "{{ app_dir }}/{{ app_name }}/wsgi.py"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+    content: |
+      import os
+      from django.core.wsgi import get_wsgi_application
+      os.environ.setdefault('DJANGO_SETTINGS_MODULE', '{{ app_name }}.settings')
+      application = get_wsgi_application()
+
+- name: Create Django views.py
+  copy:
+    dest: "{{ app_dir }}/{{ app_name }}/views.py"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+    content: |
+      from django.http import HttpResponse
+      import socket
+
+      def index(request):
+          hostname = socket.gethostname()
+          html = """
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>High Availability Web Application</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 50px; }
+                  .container { max-width: 800px; margin: 0 auto; }
+                  h1 { color: #333; }
+                  .info { background: #f0f0f0; padding: 20px; border-radius: 5px; }
+                  .hostname { color: #0066cc; font-weight: bold; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>High Availability Web Application</h1>
+                  <div class="info">
+                      <p>Server: <span class="hostname">%s</span></p>
+                      <p>Status: <span style="color: green;">Online</span></p>
+                      <p>This is a high-availability web application deployed on Yandex Cloud.</p>
+                      <p><a href="/admin/">Admin Panel</a></p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          """ % hostname
+          return HttpResponse(html)
+  notify: restart uwsgi
+
+- name: Create Django urls.py
+  copy:
+    dest: "{{ app_dir }}/{{ app_name }}/urls.py"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+    content: |
+      from django.contrib import admin
+      from django.urls import path
+      from . import views
+
+      urlpatterns = [
+          path('', views.index, name='index'),
+          path('admin/', admin.site.urls),
+      ]
+  notify: restart uwsgi
+
+- name: Create manage.py
+  copy:
+    dest: "{{ app_dir }}/manage.py"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+    content: |
+      #!/usr/bin/env python
+      import os
+      import sys
+      if __name__ == '__main__':
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE', '{{ app_name }}.settings')
+          try:
+              from django.core.management import execute_from_command_line
+          except ImportError as exc:
+              raise ImportError(
+                  "Couldn't import Django. Are you sure it's installed and "
+                  "available on your PYTHONPATH environment variable? Did you "
+                  "forget to activate a virtual environment?"
+              ) from exc
+          execute_from_command_line(sys.argv)
 
 - name: Create .env file
   template:
@@ -89,12 +214,55 @@
   become_user: "{{ app_user }}"
   environment:
     DJANGO_SETTINGS_MODULE: "{{ app_name }}.settings"
+  when: inventory_hostname == groups['backend'][0]
+  run_once: true
+
+- name: Create Wagtail superuser
+  shell: |
+    {{ app_dir }}/venv/bin/python {{ app_dir }}/manage.py shell << 'PYTHON_EOF'
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    try:
+        if not User.objects.filter(username='admin').exists():
+            User.objects.create_superuser('admin', 'admin@example.com', 'admin')
+            print('Superuser created')
+        else:
+            print('Superuser already exists')
+    except Exception as e:
+        print(f'Superuser creation skipped: {e}')
+    PYTHON_EOF
+  become_user: "{{ app_user }}"
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_name }}.settings"
+  when: inventory_hostname == groups['backend'][0]
+  run_once: true
+  register: superuser_result
+  changed_when: "'Superuser created' in superuser_result.stdout"
+  failed_when: false
+
+- name: Ensure static directory exists with correct permissions
+  file:
+    path: "{{ static_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+    recurse: no
 
 - name: Collect static files
   command: "{{ app_dir }}/venv/bin/python {{ app_dir }}/manage.py collectstatic --noinput"
   become_user: "{{ app_user }}"
   environment:
     DJANGO_SETTINGS_MODULE: "{{ app_name }}.settings"
+
+- name: Set correct permissions on shared static directory
+  file:
+    path: "{{ static_dir }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+    state: directory
+    recurse: yes
 
 - name: Create uWSGI configuration
   template:
@@ -113,6 +281,14 @@
   notify:
     - reload systemd
     - restart uwsgi
+
+- name: Create uWSGI log directory
+  file:
+    path: /var/log/uwsgi
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
 
 - name: Enable and start uWSGI service
   service:
