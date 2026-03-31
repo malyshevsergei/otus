@@ -1,0 +1,105 @@
+---
+- name: Setup VM for MySQL Cluster
+  hosts: mysql_cluster
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ ansible_host }} {{ inventory_hostname }}"
+        state: present
+
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install base packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - git
+          - vim
+          - htop
+          - net-tools
+          - python3-pip
+          - python3-setuptools
+        state: present
+
+    - name: Configure firewall (ufw)
+      block:
+        - name: Install ufw
+          apt:
+            name: ufw
+            state: present
+
+        - name: Allow SSH
+          ufw:
+            rule: allow
+            port: '22'
+            proto: tcp
+
+        - name: Allow MySQL Router RW
+          ufw:
+            rule: allow
+            port: '6446'
+            proto: tcp
+
+        - name: Allow MySQL Router RO
+          ufw:
+            rule: allow
+            port: '6447'
+            proto: tcp
+
+        - name: Allow MySQL Server ports
+          ufw:
+            rule: allow
+            port: "{{ item }}"
+            proto: tcp
+          loop:
+            - '3311'
+            - '3312'
+            - '3313'
+            - '33061'
+            - '33062'
+            - '33063'
+
+        - name: Enable ufw
+          ufw:
+            state: enabled
+      when: configure_firewall | default(true)
+
+    - name: Set timezone
+      timezone:
+        name: Europe/Moscow
+
+    - name: Configure sysctl for MySQL
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { key: 'vm.swappiness', value: '10' }
+        - { key: 'net.core.somaxconn', value: '1024' }
+        - { key: 'net.ipv4.tcp_max_syn_backlog', value: '2048' }
+
+    - name: Create project directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: "{{ project_user }}"
+        group: "{{ project_user }}"
+        mode: '0755'

@@ -1,0 +1,76 @@
+---
+- name: Manage MySQL InnoDB Cluster
+  hosts: mysql_cluster
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Cluster management menu
+      pause:
+        prompt: |
+          Choose action:
+          1) Check cluster status
+          2) Restart cluster
+          3) Stop cluster
+          4) Start cluster
+          5) View logs
+          6) Backup database
+          Enter number
+      register: action_choice
+
+    - name: Check cluster status
+      shell: |
+        cd {{ project_dir }} && make check
+      register: status_output
+      when: action_choice.user_input == "1"
+
+    - name: Display status
+      debug:
+        var: status_output.stdout_lines
+      when: action_choice.user_input == "1"
+
+    - name: Restart cluster
+      shell: |
+        cd {{ project_dir }} && make restart
+      when: action_choice.user_input == "2"
+
+    - name: Stop cluster
+      shell: |
+        cd {{ project_dir }} && make stop
+      when: action_choice.user_input == "3"
+
+    - name: Start cluster
+      shell: |
+        cd {{ project_dir }} && make start
+      when: action_choice.user_input == "4"
+
+    - name: View logs
+      shell: |
+        cd {{ project_dir }} && docker compose logs --tail=100
+      register: logs_output
+      when: action_choice.user_input == "5"
+
+    - name: Display logs
+      debug:
+        var: logs_output.stdout_lines
+      when: action_choice.user_input == "5"
+
+    - name: Backup database
+      block:
+        - name: Create backup directory
+          file:
+            path: "{{ project_dir }}/backups"
+            state: directory
+            mode: '0755'
+
+        - name: Run mysqldump
+          shell: |
+            docker exec mysql-server-1 mysqldump -uroot -p{{ mysql_root_password }} \
+              --all-databases --single-transaction --triggers --routines --events \
+              > {{ project_dir }}/backups/backup_$(date +%Y%m%d_%H%M%S).sql
+          register: backup_result
+
+        - name: Display backup result
+          debug:
+            msg: "Backup created: {{ backup_result.stdout }}"
+      when: action_choice.user_input == "6"

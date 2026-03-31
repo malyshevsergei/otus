@@ -1,0 +1,40 @@
+[mysqld]
+# InnoDB Cluster Configuration
+disabled_storage_engines="MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY"
+gtid_mode=ON
+enforce_gtid_consistency=ON
+master_info_repository=TABLE
+relay_log_info_repository=TABLE
+binlog_checksum=NONE
+log_slave_updates=ON
+log_bin=binlog
+binlog_format=ROW
+transaction_write_set_extraction=XXHASH64
+
+# Performance
+innodb_buffer_pool_size=256M
+innodb_log_file_size=64M
+max_connections=200
+
+# Group Replication
+plugin_load_add='group_replication.so'
+transaction_isolation='READ-COMMITTED'
+binlog_transaction_dependency_tracking=WRITESET
+slave_preserve_commit_order=ON
+slave_parallel_type=LOGICAL_CLOCK
+slave_parallel_workers=4
+
+# Character set
+character-set-server={{ project_db_charset }}
+collation-server={{ project_db_collation }}
+
+# Logging (использует стандартные пути Docker)
+# log_error использует stdout/stderr контейнера
+slow_query_log=1
+long_query_time=2
+
+[mysql]
+default-character-set={{ project_db_charset }}
+
+[client]
+default-character-set={{ project_db_charset }}

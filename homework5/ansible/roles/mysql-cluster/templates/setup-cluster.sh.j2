@@ -1,0 +1,39 @@
+#!/bin/bash
+
+echo "=== Waiting for MySQL servers to be ready ==="
+sleep 20
+
+echo "=== Creating InnoDB Cluster Administrator User on all nodes ==="
+for server in mysql-server-1 mysql-server-2 mysql-server-3; do
+  echo "Configuring $server..."
+  mysql -h $server -uroot -p{{ mysql_root_password }} <<EOF
+CREATE USER IF NOT EXISTS '{{ mysql_cluster_admin }}'@'%' IDENTIFIED BY '{{ mysql_cluster_password }}';
+GRANT ALL PRIVILEGES ON *.* TO '{{ mysql_cluster_admin }}'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+EOF
+done
+
+echo "=== Configuring instances for InnoDB Cluster ==="
+mysqlsh --log-level=DEBUG3 -uroot -p{{ mysql_root_password }} -h mysql-server-1 --js <<EOF
+dba.configureInstance('root@mysql-server-1:3306', {password: '{{ mysql_root_password }}', clusterAdmin: '{{ mysql_cluster_admin }}', clusterAdminPassword: '{{ mysql_cluster_password }}', restart: false});
+dba.configureInstance('root@mysql-server-2:3306', {password: '{{ mysql_root_password }}', clusterAdmin: '{{ mysql_cluster_admin }}', clusterAdminPassword: '{{ mysql_cluster_password }}', restart: false});
+dba.configureInstance('root@mysql-server-3:3306', {password: '{{ mysql_root_password }}', clusterAdmin: '{{ mysql_cluster_admin }}', clusterAdminPassword: '{{ mysql_cluster_password }}', restart: false});
+EOF
+
+echo "=== Creating InnoDB Cluster ==="
+# Удалить старый кластер если существует
+mysqlsh --log-level=ERROR -u{{ mysql_cluster_admin }} -p{{ mysql_cluster_password }} -h mysql-server-1 --js -e "try { dba.dropMetadataSchema({force:true}); } catch(e) {}" 2>/dev/null || true
+
+mysqlsh --log-level=DEBUG3 -u{{ mysql_cluster_admin }} -p{{ mysql_cluster_password }} -h mysql-server-1 --js <<EOF
+var cluster = dba.createCluster('{{ mysql_cluster_name }}');
+cluster.addInstance('{{ mysql_cluster_admin }}@mysql-server-2:3306', {password: '{{ mysql_cluster_password }}', recoveryMethod: 'clone'});
+cluster.addInstance('{{ mysql_cluster_admin }}@mysql-server-3:3306', {password: '{{ mysql_cluster_password }}', recoveryMethod: 'clone'});
+cluster.status();
+EOF
+
+echo "=== InnoDB Cluster Setup Complete ==="
+echo "=== Cluster Status ==="
+mysqlsh --log-level=DEBUG3 -u{{ mysql_cluster_admin }} -p{{ mysql_cluster_password }} -h mysql-server-1 --js <<EOF
+var cluster = dba.getCluster('{{ mysql_cluster_name }}');
+cluster.status();
+EOF

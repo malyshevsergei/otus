@@ -1,0 +1,46 @@
+.PHONY: help start stop restart status setup-cluster create-db check clean logs
+
+help:
+	@echo "MySQL InnoDB Cluster Management"
+	@echo ""
+	@echo "Available commands:"
+	@echo "  make start          - Start all containers"
+	@echo "  make stop           - Stop all containers"
+	@echo "  make restart        - Restart all containers"
+	@echo "  make status         - Show container status"
+	@echo "  make setup-cluster  - Configure InnoDB Cluster"
+	@echo "  make create-db      - Create project database"
+	@echo "  make check          - Check cluster status"
+	@echo "  make logs           - Show logs from all containers"
+	@echo "  make clean          - Stop and remove all containers and volumes"
+
+start:
+	docker compose up -d
+
+stop:
+	docker compose stop
+
+restart:
+	docker compose restart
+
+status:
+	docker compose ps
+
+setup-cluster:
+	@echo "Setting up InnoDB Cluster..."
+	docker exec -it mysql-shell bash /scripts/setup-cluster.sh
+
+create-db:
+	@echo "Creating project database..."
+	docker exec -i mysql-shell mysql -h mysql-server-1 -uroot -p{{ mysql_root_password }} < /scripts/create-database.sql
+
+check:
+	docker exec -it mysql-shell bash /scripts/check-cluster-status.sh
+
+logs:
+	docker compose logs -f
+
+clean:
+	docker compose down -v
+
+all: start setup-cluster create-db check

@@ -1,0 +1,8 @@
+*.retry
+.vault_pass
+*.pyc
+__pycache__/
+.ansible/
+*.log
+.DS_Store
+vault_password.txt

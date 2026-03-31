@@ -1,0 +1,55 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+  - git
+  - make
+
+runcmd:
+  # Install Docker
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  - usermod -aG docker ubuntu
+  - systemctl enable docker
+  - systemctl start docker
+
+  # Create project directory
+  - mkdir -p /home/ubuntu/mysql-cluster
+  - chown -R ubuntu:ubuntu /home/ubuntu/mysql-cluster
+
+write_files:
+  - path: /home/ubuntu/mysql-cluster/README.txt
+    content: |
+      MySQL InnoDB Cluster Setup
+      ==========================
+
+      1. Upload project files to this directory
+      2. Run: docker compose up -d
+      3. Run: docker exec -it mysql-shell bash /scripts/setup-cluster.sh
+      4. Run: docker exec -i mysql-shell mysql -h mysql-server-1 -uroot -prootpass < scripts/create-database.sql
+
+      Or use Makefile:
+        make all
+    owner: ubuntu:ubuntu
+    permissions: '0644'
+
+final_message: |
+  ========================================
+  MySQL InnoDB Cluster VM is ready!
+
+  Docker version: $(docker --version)
+
+  Next steps:
+  1. Upload project files to /home/ubuntu/mysql-cluster
+  2. cd /home/ubuntu/mysql-cluster
+  3. docker compose up -d
+  4. Follow the setup instructions
+  ========================================
