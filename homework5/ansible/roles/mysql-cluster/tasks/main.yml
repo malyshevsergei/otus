@@ -1,0 +1,104 @@
+---
+- name: Copy MySQL configuration
+  template:
+    src: my.cnf.j2
+    dest: "{{ project_dir }}/config/my.cnf"
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0644'
+
+- name: Copy Docker Compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ project_dir }}/docker-compose.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0644'
+
+- name: Copy cluster setup script
+  template:
+    src: setup-cluster.sh.j2
+    dest: "{{ project_dir }}/scripts/setup-cluster.sh"
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0755'
+
+- name: Copy cluster check script
+  template:
+    src: check-cluster-status.sh.j2
+    dest: "{{ project_dir }}/scripts/check-cluster-status.sh"
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0755'
+
+- name: Copy database creation script
+  template:
+    src: create-database.sql.j2
+    dest: "{{ project_dir }}/scripts/create-database.sql"
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0644'
+
+- name: Copy Makefile
+  template:
+    src: Makefile.j2
+    dest: "{{ project_dir }}/Makefile"
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0644'
+
+- name: Pull Docker images
+  shell: docker compose pull
+  args:
+    chdir: "{{ project_dir }}"
+  register: pull_result
+  changed_when: "'Pulling' in pull_result.stdout"
+
+- name: Start MySQL Cluster containers
+  shell: docker compose up -d
+  args:
+    chdir: "{{ project_dir }}"
+  register: compose_result
+  changed_when: "'Started' in compose_result.stdout or 'Created' in compose_result.stdout"
+
+- name: Wait for MySQL servers to be healthy
+  shell: |
+    docker inspect --format='{{"{{.State.Health.Status}}"}}' mysql-server-{{ item }}
+  register: health_check
+  until: health_check.stdout == "healthy"
+  retries: 30
+  delay: 10
+  loop:
+    - 1
+    - 2
+    - 3
+  changed_when: false
+
+- name: Setup InnoDB Cluster
+  shell: |
+    docker exec mysql-shell bash /scripts/setup-cluster.sh
+  args:
+    chdir: "{{ project_dir }}"
+  register: cluster_setup
+  changed_when: "'Cluster successfully created' in cluster_setup.stdout"
+  ignore_errors: yes
+
+- name: Create project database
+  shell: |
+    docker exec -i mysql-shell mysql -h mysql-server-1 -uroot -p{{ mysql_root_password }} < {{ project_dir }}/scripts/create-database.sql
+  args:
+    chdir: "{{ project_dir }}"
+  register: db_creation
+  changed_when: "'Database change' in db_creation.stdout"
+
+- name: Check cluster status
+  shell: |
+    docker exec mysql-shell bash /scripts/check-cluster-status.sh
+  args:
+    chdir: "{{ project_dir }}"
+  register: cluster_status
+  changed_when: false
+
+- name: Display cluster status
+  debug:
+    var: cluster_status.stdout_lines

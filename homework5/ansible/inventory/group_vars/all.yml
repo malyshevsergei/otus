@@ -1,0 +1,30 @@
+---
+# Global variables for all hosts
+
+# Project settings
+project_name: "mysql-innodb-cluster"
+project_dir: "/opt/mysql-cluster"
+project_user: "ubuntu"
+
+# Docker settings
+docker_version: "5:24.0.0-1~ubuntu.22.04~jammy"
+docker_compose_version: "2.24.0"
+
+# MySQL Cluster settings
+mysql_image: "mysql/mysql-server:8.0"
+mysql_router_image: "mysql/mysql-router:8.0"
+
+# Database settings
+project_db_name: "project_db"
+project_db_charset: "utf8mb4"
+project_db_collation: "utf8mb4_unicode_ci"
+
+# Security settings
+mysql_root_password: "{{ vault_mysql_root_password | default('rootpass') }}"
+mysql_cluster_admin: "clusteradmin"
+mysql_cluster_password: "{{ vault_mysql_cluster_password | default('clusterpass') }}"
+mysql_app_user: "appuser"
+mysql_app_password: "{{ vault_mysql_app_password | default('apppass') }}"
+
+# Monitoring
+enable_monitoring: false

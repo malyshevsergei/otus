@@ -1,0 +1,12 @@
+# Пример файла с переменными для Terraform
+# Скопируйте в terraform.tfvars и заполните своими значениями
+
+# Получить значения:
+# yc config list
+
+# zone = "ru-central1-a"
+# vm_name = "mysql-cluster"
+# vm_cores = 4
+# vm_memory = 8
+# disk_size = 50
+# ssh_key_path = "~/.ssh/id_rsa.pub"

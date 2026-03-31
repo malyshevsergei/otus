@@ -1,0 +1,40 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install common packages
+  apt:
+    name:
+      - curl
+      - git
+      - vim
+      - htop
+      - net-tools
+      - python3-pip
+      - python3-docker
+      - make
+    state: present
+
+- name: Ensure project directory exists
+  file:
+    path: "{{ project_dir }}"
+    state: directory
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0755'
+
+- name: Create subdirectories
+  file:
+    path: "{{ project_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ project_user }}"
+    group: "{{ project_user }}"
+    mode: '0755'
+  loop:
+    - config
+    - scripts
+    - data
+    - logs

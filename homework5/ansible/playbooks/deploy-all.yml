@@ -1,0 +1,41 @@
+---
+- name: Deploy MySQL InnoDB Cluster
+  hosts: mysql_cluster
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Clean up conflicting Docker repositories
+      shell: |
+        rm -f /etc/apt/sources.list.d/docker.list
+        rm -f /usr/share/keyrings/docker-archive-keyring.gpg
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      ignore_errors: yes
+
+  roles:
+    - role: common
+      tags: [common, base]
+
+    - role: docker
+      tags: [docker]
+
+    - role: mysql-cluster
+      tags: [mysql, cluster]
+
+  post_tasks:
+    - name: Display cluster information
+      debug:
+        msg:
+          - "MySQL InnoDB Cluster deployed successfully!"
+          - "Cluster name: {{ mysql_cluster_name }}"
+          - "Router RW port: 6446"
+          - "Router RO port: 6447"
+          - "App user: {{ mysql_app_user }}"
+          - "App database: {{ project_db_name }}"
