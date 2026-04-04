@@ -1,0 +1,40 @@
+---
+- name: Install HAProxy
+  apt:
+    name: haproxy
+    state: present
+    update_cache: yes
+
+- name: Deploy HAProxy configuration
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+  register: haproxy_config
+
+- name: Restart HAProxy after config change
+  systemd:
+    name: haproxy
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+  when: haproxy_config.changed
+
+- name: Start and enable HAProxy
+  systemd:
+    name: haproxy
+    state: started
+    enabled: yes
+  when: not haproxy_config.changed
+
+- name: Wait for HAProxy stats page
+  uri:
+    url: "http://127.0.0.1:{{ haproxy_stats_port }}/stats"
+    status_code: [200, 401]
+  register: haproxy_health
+  retries: 10
+  delay: 3
+  until: haproxy_health.status in [200, 401]
+  changed_when: false

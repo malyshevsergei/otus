@@ -1,0 +1,40 @@
+---
+# Full deployment: etcd -> patroni -> haproxy -> migrate database
+- name: Deploy common packages on all nodes
+  hosts: all
+  roles:
+    - common
+
+- name: Deploy etcd cluster
+  hosts: patroni_cluster
+  roles:
+    - etcd
+
+- name: Deploy Patroni + PostgreSQL cluster
+  hosts: patroni_cluster
+  serial: 1
+  roles:
+    - patroni
+
+- name: Deploy HAProxy load balancer
+  hosts: haproxy
+  roles:
+    - haproxy
+
+- name: Migrate project database
+  hosts: haproxy
+  roles:
+    - migrate
+
+- name: Show cluster info
+  hosts: patroni_cluster[0]
+  tasks:
+    - name: Show Patroni cluster status
+      command: patronictl -c /etc/patroni/patroni.yml list
+      become_user: postgres
+      register: cluster_status
+      changed_when: false
+
+    - name: Display cluster status
+      debug:
+        msg: "{{ cluster_status.stdout_lines }}"

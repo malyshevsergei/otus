@@ -1,0 +1,126 @@
+---
+- name: Add PostgreSQL APT repository key
+  apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+
+- name: Add PostgreSQL APT repository
+  apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+
+- name: Install PostgreSQL {{ pg_version }}
+  apt:
+    name:
+      - "postgresql-{{ pg_version }}"
+      - "postgresql-client-{{ pg_version }}"
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
+- name: Stop default PostgreSQL service
+  systemd:
+    name: "postgresql"
+    state: stopped
+    enabled: no
+
+- name: Install Patroni and dependencies
+  pip:
+    name:
+      - "patroni[etcd3]"
+    state: present
+
+- name: Create Patroni configuration directory
+  file:
+    path: /etc/patroni
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0750'
+
+- name: Create Patroni data directory
+  file:
+    path: "{{ pg_data_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+
+- name: Stop Patroni if running
+  systemd:
+    name: patroni
+    state: stopped
+  ignore_errors: yes
+
+- name: Clean Patroni data directory for fresh init
+  file:
+    path: "{{ pg_data_dir }}"
+    state: absent
+  when: patroni_force_reinit | default(false) | bool
+
+- name: Recreate Patroni data directory
+  file:
+    path: "{{ pg_data_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+
+- name: Deploy Patroni configuration
+  template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: postgres
+    group: postgres
+    mode: '0640'
+
+- name: Deploy Patroni systemd unit
+  template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+
+- name: Start and enable Patroni
+  systemd:
+    name: patroni
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Wait for Patroni to initialize
+  uri:
+    url: "http://{{ patroni_node_ip }}:8008/health"
+    status_code: [200]
+  register: patroni_health
+  retries: 30
+  delay: 5
+  until: patroni_health.status == 200
+  changed_when: false
+
+- name: Create application database and user (on leader only)
+  block:
+    - name: Check if this node is the leader
+      uri:
+        url: "http://{{ patroni_node_ip }}:8008/leader"
+        status_code: [200, 503]
+      register: leader_check
+
+    - name: Create application user
+      become_user: postgres
+      postgresql_user:
+        name: "{{ pg_app_user }}"
+        password: "{{ pg_app_password }}"
+        role_attr_flags: LOGIN
+        state: present
+      when: leader_check.status == 200
+
+    - name: Create application database
+      become_user: postgres
+      postgresql_db:
+        name: "{{ pg_app_database }}"
+        owner: "{{ pg_app_user }}"
+        encoding: UTF8
+        template: template0
+        lc_collate: C.UTF-8
+        lc_ctype: C.UTF-8
+        state: present
+      when: leader_check.status == 200
