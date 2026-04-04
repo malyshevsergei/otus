@@ -1,0 +1,44 @@
+---
+- name: Add PostgreSQL APT repository key
+  apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+
+- name: Add PostgreSQL APT repository
+  apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+
+- name: Install PostgreSQL client
+  apt:
+    name:
+      - "postgresql-client-{{ pg_version }}"
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
+- name: Copy migration SQL script
+  copy:
+    src: migrate_project_db.sql
+    dest: /tmp/migrate_project_db.sql
+    mode: '0644'
+
+- name: Wait for HAProxy RW port to be available
+  wait_for:
+    host: "{{ haproxy_node_ip }}"
+    port: "{{ haproxy_pg_rw_port }}"
+    timeout: 60
+
+- name: Apply migration SQL via HAProxy
+  become_user: root
+  environment:
+    PGPASSWORD: "{{ pg_app_password }}"
+  command: >
+    psql -h {{ haproxy_node_ip }} -p {{ haproxy_pg_rw_port }}
+    -U {{ pg_app_user }} -d {{ pg_app_database }}
+    -f /tmp/migrate_project_db.sql
+  register: migrate_result
+
+- name: Show migration result
+  debug:
+    msg: "{{ migrate_result.stdout_lines }}"

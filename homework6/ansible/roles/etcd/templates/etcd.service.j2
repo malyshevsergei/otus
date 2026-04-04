@@ -1,0 +1,24 @@
+[Unit]
+Description=etcd distributed key-value store
+Documentation=https://etcd.io/docs/
+After=network.target
+
+[Service]
+User=etcd
+Type=notify
+ExecStart=/usr/local/bin/etcd \
+  --name {{ etcd_name }} \
+  --data-dir /var/lib/etcd \
+  --listen-client-urls http://{{ patroni_node_ip }}:{{ etcd_client_port }},http://127.0.0.1:{{ etcd_client_port }} \
+  --advertise-client-urls http://{{ patroni_node_ip }}:{{ etcd_client_port }} \
+  --listen-peer-urls http://{{ patroni_node_ip }}:{{ etcd_peer_port }} \
+  --initial-advertise-peer-urls http://{{ patroni_node_ip }}:{{ etcd_peer_port }} \
+  --initial-cluster {{ etcd_initial_cluster }} \
+  --initial-cluster-token patroni-etcd-cluster \
+  --initial-cluster-state new
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

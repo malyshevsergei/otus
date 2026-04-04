@@ -1,0 +1,39 @@
+# PostgreSQL
+pg_version: "15"
+pg_data_dir: /var/lib/postgresql/{{ pg_version }}/patroni
+pg_bin_dir: /usr/lib/postgresql/{{ pg_version }}/bin
+pg_port: 5432
+pg_superuser: postgres
+pg_superuser_password: "SuperSecret123"
+pg_replicator_user: replicator
+pg_replicator_password: "ReplicaPass123"
+pg_app_user: appuser
+pg_app_password: "AppPass123"
+pg_app_database: project_db
+
+# Patroni
+patroni_scope: pg_cluster
+patroni_namespace: /service
+
+# etcd
+etcd_version: "3.5.12"
+etcd_client_port: 2379
+etcd_peer_port: 2380
+etcd_initial_cluster: "etcd1=http://10.130.0.11:2380,etcd2=http://10.130.0.12:2380,etcd3=http://10.130.0.13:2380"
+etcd_endpoints: "http://10.130.0.11:2379,http://10.130.0.12:2379,http://10.130.0.13:2379"
+
+# HAProxy
+haproxy_stats_port: 7000
+haproxy_pg_rw_port: 5000
+haproxy_pg_ro_port: 5001
+haproxy_stats_user: admin
+haproxy_stats_password: "HaproxyAdmin123"
+
+# Patroni node list (for HAProxy config)
+patroni_nodes:
+  - name: patroni-1
+    ip: 10.130.0.11
+  - name: patroni-2
+    ip: 10.130.0.12
+  - name: patroni-3
+    ip: 10.130.0.13

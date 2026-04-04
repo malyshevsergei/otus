@@ -1,0 +1,23 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - curl
+      - wget
+      - gnupg
+      - lsb-release
+      - net-tools
+      - jq
+    state: present
+
+- name: Set timezone
+  timezone:
+    name: Europe/Moscow

@@ -1,0 +1,91 @@
+---
+# Test failover: stop leader, verify new leader is elected
+- name: Test Patroni failover
+  hosts: patroni_cluster[0]
+  become: yes
+  tasks:
+    - name: Show initial cluster state
+      command: patronictl -c /etc/patroni/patroni.yml list
+      become_user: postgres
+      register: before_status
+      changed_when: false
+
+    - name: "=== BEFORE FAILOVER ==="
+      debug:
+        msg: "{{ before_status.stdout_lines }}"
+
+    - name: Identify current leader
+      uri:
+        url: "http://{{ patroni_node_ip }}:8008/cluster"
+        return_content: yes
+      register: cluster_info
+
+    - name: Find leader node
+      set_fact:
+        leader_name: "{{ (cluster_info.content | from_json).members | selectattr('role', 'equalto', 'leader') | map(attribute='name') | first }}"
+
+    - name: "Current leader is: {{ leader_name }}"
+      debug:
+        msg: "Will stop Patroni on {{ leader_name }} to trigger failover"
+
+- name: Stop Patroni on leader node to trigger failover
+  hosts: patroni_cluster
+  serial: 1
+  tasks:
+    - name: Stop Patroni on leader
+      systemd:
+        name: patroni
+        state: stopped
+      when: inventory_hostname == hostvars[groups['patroni_cluster'][0]]['leader_name']
+
+    - name: Wait for failover to complete
+      pause:
+        seconds: 15
+      when: inventory_hostname == hostvars[groups['patroni_cluster'][0]]['leader_name']
+
+- name: Verify new leader elected
+  hosts: patroni_cluster
+  tasks:
+    - name: Check Patroni health on running nodes
+      uri:
+        url: "http://{{ patroni_node_ip }}:8008/cluster"
+        return_content: yes
+      register: after_cluster
+      ignore_errors: yes
+
+    - name: Show new cluster state
+      command: patronictl -c /etc/patroni/patroni.yml list
+      become_user: postgres
+      register: after_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: "=== AFTER FAILOVER ==="
+      debug:
+        msg: "{{ after_status.stdout_lines | default('Node is down') }}"
+      when: after_status is succeeded
+
+- name: Restart stopped node
+  hosts: patroni_cluster
+  tasks:
+    - name: Ensure Patroni is running on all nodes
+      systemd:
+        name: patroni
+        state: started
+
+    - name: Wait for node to rejoin
+      pause:
+        seconds: 10
+
+- name: Final cluster state
+  hosts: patroni_cluster[0]
+  tasks:
+    - name: Show final cluster state
+      command: patronictl -c /etc/patroni/patroni.yml list
+      become_user: postgres
+      register: final_status
+      changed_when: false
+
+    - name: "=== FINAL STATE (after leader restart) ==="
+      debug:
+        msg: "{{ final_status.stdout_lines }}"

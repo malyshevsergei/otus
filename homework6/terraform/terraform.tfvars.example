@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in values
+# Credentials are taken from environment variables:
+#   export YC_TOKEN=$(yc iam create-token)
+#   export YC_CLOUD_ID=<your-cloud-id>
+#   export YC_FOLDER_ID=<your-folder-id>
+
+zone                = "ru-central1-a"
+image_id            = "fd8autg36kchufhej5mh"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+vm_cores            = 2
+vm_memory           = 4
+disk_size           = 20

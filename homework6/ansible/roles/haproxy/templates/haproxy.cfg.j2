@@ -1,0 +1,52 @@
+global
+    maxconn 1000
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    mode tcp
+    log global
+    retries 3
+    timeout queue 1m
+    timeout connect 10s
+    timeout client 1m
+    timeout server 1m
+    timeout check 10s
+    maxconn 900
+
+# Stats web interface
+listen stats
+    mode http
+    bind *:{{ haproxy_stats_port }}
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats realm HAProxy\ Stats
+    stats auth {{ haproxy_stats_user }}:{{ haproxy_stats_password }}
+
+# Primary (read-write) — routes to Patroni leader
+listen pg_rw
+    bind *:{{ haproxy_pg_rw_port }}
+    option httpchk GET /primary
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{% for node in patroni_nodes %}
+    server {{ node.name }} {{ node.ip }}:{{ pg_port }} maxconn 100 check port 8008
+{% endfor %}
+
+# Replicas (read-only) — routes to Patroni replicas
+listen pg_ro
+    bind *:{{ haproxy_pg_ro_port }}
+    balance roundrobin
+    option httpchk GET /replica
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{% for node in patroni_nodes %}
+    server {{ node.name }} {{ node.ip }}:{{ pg_port }} maxconn 100 check port 8008
+{% endfor %}
