@@ -1,0 +1,57 @@
+---
+- name: Install Elasticsearch
+  apt:
+    name: "elasticsearch={{ es_version }}"
+    state: present
+
+- name: Deploy Elasticsearch configuration
+  template:
+    src: elasticsearch.yml.j2
+    dest: /etc/elasticsearch/elasticsearch.yml
+    owner: root
+    group: elasticsearch
+    mode: '0660'
+  notify: Restart elasticsearch
+
+- name: Configure JVM heap size
+  template:
+    src: jvm.options.j2
+    dest: /etc/elasticsearch/jvm.options.d/heap.options
+    owner: root
+    group: elasticsearch
+    mode: '0660'
+  notify: Restart elasticsearch
+
+- name: Configure system limits for Elasticsearch
+  copy:
+    content: |
+      elasticsearch soft nofile 65536
+      elasticsearch hard nofile 65536
+      elasticsearch soft memlock unlimited
+      elasticsearch hard memlock unlimited
+    dest: /etc/security/limits.d/elasticsearch.conf
+
+- name: Set vm.max_map_count
+  sysctl:
+    name: vm.max_map_count
+    value: "262144"
+    state: present
+    reload: yes
+
+- name: Enable and start Elasticsearch
+  systemd:
+    name: elasticsearch
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Wait for Elasticsearch to start
+  uri:
+    url: "http://{{ es_node_ip }}:{{ es_http_port }}/_cluster/health"
+    method: GET
+    status_code: [200]
+  register: es_health
+  retries: 30
+  delay: 10
+  until: es_health.status == 200
+  changed_when: false

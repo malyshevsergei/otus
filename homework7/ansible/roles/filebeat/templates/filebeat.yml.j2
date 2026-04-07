@@ -1,0 +1,53 @@
+filebeat.inputs:
+
+  # System logs (syslog, auth)
+  - type: filestream
+    id: syslog
+    paths:
+      - /var/log/syslog
+      - /var/log/auth.log
+    tags: ["syslog"]
+
+  # PostgreSQL logs (on patroni nodes)
+  - type: filestream
+    id: postgresql
+    paths:
+      - /var/lib/postgresql/15/patroni/pg_log/*.log
+    tags: ["postgresql"]
+    ignore_older: 24h
+
+  # Patroni logs (from journald)
+  - type: journald
+    id: patroni
+    include_matches:
+      - _SYSTEMD_UNIT=patroni.service
+    tags: ["patroni"]
+
+  # HAProxy logs
+  - type: filestream
+    id: haproxy
+    paths:
+      - /var/log/haproxy.log
+    tags: ["haproxy"]
+
+  # etcd logs (from journald)
+  - type: journald
+    id: etcd
+    include_matches:
+      - _SYSTEMD_UNIT=etcd.service
+    tags: ["etcd"]
+
+output.logstash:
+  hosts: ["{{ filebeat_logstash_host }}"]
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 3

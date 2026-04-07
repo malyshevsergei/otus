@@ -1,0 +1,11 @@
+# Credentials via env:
+#   export YC_TOKEN=$(yc iam create-token)
+#   export YC_CLOUD_ID=<your-cloud-id>
+#   export YC_FOLDER_ID=<your-folder-id>
+
+zone                = "ru-central1-a"
+image_id            = "fd81radk00nmm2jpqh94"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+es_cores            = 2
+es_memory           = 4
+es_disk_size        = 30

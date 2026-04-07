@@ -1,0 +1,34 @@
+# Elasticsearch
+es_version: "8.13.4"
+es_cluster_name: "otus-logging"
+es_heap_size: "1g"
+es_http_port: 9200
+es_transport_port: 9300
+
+es_nodes:
+  - name: elastic-1
+    ip: 10.131.0.11
+  - name: elastic-2
+    ip: 10.131.0.12
+  - name: elastic-3
+    ip: 10.131.0.13
+
+es_seed_hosts:
+  - 10.131.0.11
+  - 10.131.0.12
+  - 10.131.0.13
+
+es_initial_master_nodes:
+  - elastic-1
+  - elastic-2
+  - elastic-3
+
+# Logstash
+logstash_node_ip: 10.131.0.20
+logstash_beats_port: 5044
+
+# Kibana
+kibana_port: 5601
+
+# Filebeat — uses public IP because homework6 nodes are on a different VPC
+filebeat_logstash_host: "62.84.114.142:5044"

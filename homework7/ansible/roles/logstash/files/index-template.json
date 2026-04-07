@@ -1,0 +1,25 @@
+{
+  "index_patterns": ["filebeat-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "index.refresh_interval": "5s"
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": { "type": "text" },
+        "source_host": { "type": "keyword" },
+        "tags": { "type": "keyword" },
+        "pg_level": { "type": "keyword" },
+        "pg_user": { "type": "keyword" },
+        "pg_database": { "type": "keyword" },
+        "patroni_level": { "type": "keyword" },
+        "syslog_program": { "type": "keyword" },
+        "syslog_hostname": { "type": "keyword" }
+      }
+    }
+  },
+  "priority": 200
+}
