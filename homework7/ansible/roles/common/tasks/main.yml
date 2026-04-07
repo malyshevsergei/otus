@@ -1,0 +1,44 @@
+---
+- name: Remove stale elastic repo files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/elastic-8.x.list
+    - /etc/apt/sources.list.d/elastic-8.x.sources
+    - /usr/share/keyrings/elastic.gpg
+    - /etc/apt/trusted.gpg.d/elastic.gpg
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg
+      - apt-transport-https
+      - net-tools
+      - jq
+    state: present
+
+- name: Import Elasticsearch GPG key
+  apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+
+- name: Add Yandex mirror for Elastic packages
+  copy:
+    content: "deb https://mirror.yandex.ru/mirrors/elastic/8/ stable main\n"
+    dest: /etc/apt/sources.list.d/elastic-8.x.list
+
+- name: Update apt cache after adding repo
+  apt:
+    update_cache: yes
+
+- name: Set timezone
+  timezone:
+    name: Europe/Moscow

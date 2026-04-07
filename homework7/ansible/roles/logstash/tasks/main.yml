@@ -1,0 +1,52 @@
+---
+- name: Install Logstash
+  apt:
+    name: "logstash=1:{{ es_version }}-1"
+    state: present
+
+- name: Deploy Logstash pipeline config
+  template:
+    src: pipeline.conf.j2
+    dest: /etc/logstash/conf.d/pipeline.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Deploy Logstash index template
+  copy:
+    src: index-template.json
+    dest: /etc/logstash/index-template.json
+    mode: '0644'
+
+- name: Deploy Logstash settings
+  template:
+    src: logstash.yml.j2
+    dest: /etc/logstash/logstash.yml
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create Logstash systemd override directory
+  file:
+    path: /etc/systemd/system/logstash.service.d
+    state: directory
+
+- name: Extend Logstash startup timeout
+  copy:
+    content: |
+      [Service]
+      TimeoutStartSec=300
+    dest: /etc/systemd/system/logstash.service.d/timeout.conf
+
+- name: Enable and start Logstash
+  systemd:
+    name: logstash
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Wait for Logstash Beats input to be ready
+  wait_for:
+    host: "{{ logstash_node_ip }}"
+    port: "{{ logstash_beats_port }}"
+    timeout: 180

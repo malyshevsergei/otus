@@ -1,0 +1,81 @@
+---
+# Full deployment: common -> elasticsearch -> logstash -> kibana -> filebeat
+
+- name: Install common packages on ELK nodes
+  hosts: elasticsearch:logstash
+  roles:
+    - common
+
+- name: Deploy Elasticsearch cluster
+  hosts: elasticsearch
+  roles:
+    - elasticsearch
+
+- name: Wait for Elasticsearch cluster to form
+  hosts: elasticsearch[0]
+  tasks:
+    - name: Wait for green/yellow cluster status
+      uri:
+        url: "http://{{ es_node_ip }}:{{ es_http_port }}/_cluster/health?wait_for_status=yellow&timeout=60s"
+        method: GET
+        status_code: [200]
+      register: cluster_health
+      retries: 10
+      delay: 15
+      until: cluster_health.status == 200
+      changed_when: false
+
+    - name: Show cluster health
+      uri:
+        url: "http://{{ es_node_ip }}:{{ es_http_port }}/_cluster/health?pretty"
+        method: GET
+        return_content: yes
+      register: health_result
+
+    - name: Display cluster health
+      debug:
+        msg: "{{ health_result.content }}"
+
+    - name: Create filebeat index template
+      uri:
+        url: "http://{{ es_node_ip }}:{{ es_http_port }}/_index_template/filebeat"
+        method: PUT
+        body: "{{ lookup('file', '../roles/logstash/files/index-template.json') }}"
+        body_format: json
+        status_code: [200]
+
+- name: Deploy Logstash
+  hosts: logstash
+  roles:
+    - logstash
+
+- name: Deploy Kibana
+  hosts: logstash
+  roles:
+    - kibana
+
+- name: Deploy Filebeat on homework6 nodes
+  hosts: filebeat_targets
+  roles:
+    - filebeat
+
+- name: Verify logs are flowing
+  hosts: elasticsearch[0]
+  tasks:
+    - name: Wait for filebeat index to appear
+      uri:
+        url: "http://{{ es_node_ip }}:{{ es_http_port }}/_cat/indices/filebeat-*?v"
+        method: GET
+        return_content: yes
+        status_code: [200]
+      register: indices_result
+      retries: 12
+      delay: 10
+      until: "'filebeat' in indices_result.content"
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Show indices
+      debug:
+        msg: "{{ indices_result.content }}"
+      when: indices_result is succeeded

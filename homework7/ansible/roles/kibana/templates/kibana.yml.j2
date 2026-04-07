@@ -1,0 +1,18 @@
+server.port: {{ kibana_port }}
+server.host: "0.0.0.0"
+server.name: "kibana"
+
+elasticsearch.hosts:
+{% for node in es_nodes %}
+  - "http://{{ node.ip }}:{{ es_http_port }}"
+{% endfor %}
+
+logging:
+  appenders:
+    file:
+      type: file
+      fileName: /var/log/kibana/kibana.log
+      layout:
+        type: json
+  root:
+    appenders: [default, file]

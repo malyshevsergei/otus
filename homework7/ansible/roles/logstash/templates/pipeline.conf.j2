@@ -1,0 +1,57 @@
+input {
+  beats {
+    port => {{ logstash_beats_port }}
+  }
+}
+
+filter {
+  # Add hostname field
+  mutate {
+    add_field => { "source_host" => "%{[host][name]}" }
+  }
+
+  # Parse syslog messages
+  if [fileset][name] == "syslog" or [input][type] == "syslog" {
+    grok {
+      match => { "message" => "%{SYSLOGTIMESTAMP:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\[%{POSINT:syslog_pid}\])?: %{GREEDYDATA:syslog_message}" }
+      overwrite => [ "message" ]
+    }
+    date {
+      match => [ "syslog_timestamp", "MMM  d HH:mm:ss", "MMM dd HH:mm:ss" ]
+    }
+  }
+
+  # Parse PostgreSQL logs
+  if "postgresql" in [tags] {
+    grok {
+      match => { "message" => "%{TIMESTAMP_ISO8601:pg_timestamp} \[%{NUMBER:pg_pid}\] %{DATA:pg_user}@%{DATA:pg_database} %{LOGLEVEL:pg_level}:  %{GREEDYDATA:pg_message}" }
+      overwrite => [ "message" ]
+    }
+    if [pg_level] {
+      mutate { lowercase => [ "pg_level" ] }
+    }
+  }
+
+  # Parse HAProxy logs
+  if "haproxy" in [tags] {
+    grok {
+      match => { "message" => "%{HAPROXYHTTP}" }
+    }
+  }
+
+  # Parse Patroni logs
+  if "patroni" in [tags] {
+    grok {
+      match => { "message" => "%{TIMESTAMP_ISO8601:patroni_timestamp} %{LOGLEVEL:patroni_level}: %{GREEDYDATA:patroni_message}" }
+      overwrite => [ "message" ]
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => [{% for node in es_nodes %}"http://{{ node.ip }}:{{ es_http_port }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+    index => "filebeat-%{+YYYY.MM.dd}"
+    manage_template => false
+  }
+}

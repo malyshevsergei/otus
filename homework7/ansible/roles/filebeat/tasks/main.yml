@@ -1,0 +1,41 @@
+---
+- name: Remove stale elastic repo files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/elastic-8.x.list
+    - /etc/apt/sources.list.d/elastic-8.x.sources
+    - /usr/share/keyrings/elastic.gpg
+
+- name: Import Elasticsearch GPG key
+  apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+
+- name: Add Yandex mirror for Elastic packages
+  copy:
+    content: "deb https://mirror.yandex.ru/mirrors/elastic/8/ stable main\n"
+    dest: /etc/apt/sources.list.d/elastic-8.x.list
+
+- name: Install Filebeat
+  apt:
+    name: "filebeat={{ es_version }}"
+    state: present
+    update_cache: yes
+
+- name: Deploy Filebeat configuration
+  template:
+    src: filebeat.yml.j2
+    dest: /etc/filebeat/filebeat.yml
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Restart filebeat
+
+- name: Enable and start Filebeat
+  systemd:
+    name: filebeat
+    state: started
+    enabled: yes
+    daemon_reload: yes
