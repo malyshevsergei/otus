@@ -1,0 +1,19 @@
+#cloud-config
+users:
+  - name: ubuntu
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDR6PzbJaNzuwgxHPmNpi5kiVk33exk9n3P7HNPybcP7R0sayYEcJbSgBPpuwTaRn+RB3v0L9Tlazs059AjrHkxd9T9irZrGdhoTpNloaKMpbXHKhR0FYvek56hcW0yeIl+VJfyBVvrAOx421QWAx3jXjptdtJdBmcdHw5i323ykopMHBKqZXXo1qh09lMKUQd3wlUrSU7BLomcoDon2hIFTPlnvuaBi/OkkKxW13p5Tv/sg/MQh9+9KDWBZoUNyogBc+WsTUJ08K+CwAI85AFmNqx5U0Se1sopCwSQNgJyfvG2g4FFms/HKjhfbLoyBxOy/tLChTV+w3VF8ic3rkPliTRE+cTC3TN+/IcMTyKthC0DmnU9/Z3l1j+YQPgIrAfW6B+YQH9DH8aVEvHSE74AlNHybgHrsClHCacmcbofkhNqp3KTz9tmKlVrNwjgt6Ekrv2+hwmjeFy4+dSUP/W/PIcl7RYaLYQM7OgId/dqZqOkBWy8fZbcWx2Tfj74hs8= s.malyshev@MBP-s.malyshev
+
+packages:
+  - python3
+  - python3-pip
+  - curl
+  - wget
+  - gnupg
+  - ca-certificates
+  - apt-transport-https
+
+package_update: true

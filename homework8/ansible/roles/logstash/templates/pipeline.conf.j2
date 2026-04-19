@@ -1,0 +1,88 @@
+input {
+  kafka {
+    bootstrap_servers => "{{ kafka_internal_ip }}:{{ kafka_port }}"
+    topics => ["nginx"]
+    group_id => "logstash-nginx"
+    consumer_threads => 2
+    decorate_events => "basic"
+    codec => "json"
+    auto_offset_reset => "earliest"
+    type => "nginx"
+  }
+
+  kafka {
+    bootstrap_servers => "{{ kafka_internal_ip }}:{{ kafka_port }}"
+    topics => ["wordpress"]
+    group_id => "logstash-wordpress"
+    consumer_threads => 2
+    decorate_events => "basic"
+    codec => "json"
+    auto_offset_reset => "earliest"
+    type => "wordpress"
+  }
+}
+
+filter {
+  # Filebeat with json.keys_under_root already parses nginx JSON logs,
+  # so fields (remote_addr, status, request, etc.) are at root level.
+  if [type] == "nginx" {
+    mutate {
+      convert => {
+        "status"          => "integer"
+        "body_bytes_sent" => "integer"
+        "request_time"    => "float"
+      }
+      add_field => { "log_type" => "nginx" }
+    }
+
+    if [time_local] {
+      date {
+        match => ["time_local", "dd/MMM/yyyy:HH:mm:ss Z"]
+        target => "@timestamp"
+        timezone => "Europe/Moscow"
+        tag_on_failure => []
+      }
+    }
+  }
+
+  if [type] == "wordpress" {
+    mutate { add_field => { "log_type" => "wordpress" } }
+
+    if [message] {
+      grok {
+        match => {
+          "message" => [
+            "\[%{DATA:php_time}\] PHP %{WORD:php_level}: %{GREEDYDATA:php_message}",
+            "%{GREEDYDATA:raw_message}"
+          ]
+        }
+        tag_on_failure => []
+      }
+    }
+  }
+
+  # Deduplicate kafka_topic (Filebeat adds it too)
+  if [kafka_topic] {
+    mutate { remove_field => ["kafka_topic"] }
+  }
+  mutate {
+    add_field => { "kafka_topic" => "%{[@metadata][kafka][topic]}" }
+    remove_field => ["[event][original]", "tags"]
+  }
+}
+
+output {
+  if [type] == "nginx" {
+    elasticsearch {
+      hosts => ["localhost:{{ elasticsearch_http_port }}"]
+      index => "nginx-%{+YYYY.MM.dd}"
+      manage_template => false
+    }
+  } else if [type] == "wordpress" {
+    elasticsearch {
+      hosts => ["localhost:{{ elasticsearch_http_port }}"]
+      index => "wordpress-%{+YYYY.MM.dd}"
+      manage_template => false
+    }
+  }
+}

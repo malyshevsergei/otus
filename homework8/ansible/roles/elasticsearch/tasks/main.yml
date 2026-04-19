@@ -1,0 +1,67 @@
+---
+- name: Wait for apt/dpkg locks to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      sleep 3
+    done
+  changed_when: false
+  timeout: 300
+
+- name: Install Elasticsearch
+  apt:
+    name: "elasticsearch={{ elk_version }}"
+    state: present
+
+- name: Deploy elasticsearch.yml
+  template:
+    src: elasticsearch.yml.j2
+    dest: /etc/elasticsearch/elasticsearch.yml
+    owner: root
+    group: elasticsearch
+    mode: "0660"
+  notify: restart elasticsearch
+
+- name: Deploy JVM options
+  template:
+    src: jvm.options.j2
+    dest: /etc/elasticsearch/jvm.options.d/heap.options
+    owner: root
+    group: elasticsearch
+    mode: "0660"
+  notify: restart elasticsearch
+
+- name: Set vm.max_map_count
+  sysctl:
+    name: vm.max_map_count
+    value: "262144"
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Set system limits for Elasticsearch
+  pam_limits:
+    domain: elasticsearch
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop:
+    - { type: soft, item: nofile,  value: "65536" }
+    - { type: hard, item: nofile,  value: "65536" }
+    - { type: soft, item: memlock, value: unlimited }
+    - { type: hard, item: memlock, value: unlimited }
+
+- name: Enable and start Elasticsearch
+  systemd:
+    name: elasticsearch
+    state: started
+    enabled: yes
+
+- name: Wait for Elasticsearch to be healthy
+  uri:
+    url: "http://localhost:{{ elasticsearch_http_port }}/_cluster/health"
+    return_content: yes
+    status_code: 200
+  register: es_health
+  until: es_health.status == 200
+  retries: 30
+  delay: 10

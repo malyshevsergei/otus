@@ -1,0 +1,33 @@
+# ELK stack
+elk_version: "8.13.4"
+elk_internal_ip: "10.132.0.30"
+
+# Elasticsearch
+elasticsearch_cluster_name: "otus-homework8"
+elasticsearch_heap_size: "2g"
+elasticsearch_http_port: 9200
+
+# Kibana
+kibana_port: 5601
+
+# Kafka
+kafka_version: "3.7.0"
+kafka_scala_version: "2.13"
+kafka_internal_ip: "10.132.0.20"
+kafka_port: 9092
+kafka_log_retention_hours: 168
+kafka_topics:
+  - name: nginx
+    partitions: 2
+    replication_factor: 1
+  - name: wordpress
+    partitions: 2
+    replication_factor: 1
+
+# WordPress database
+wp_db_name: wordpress
+wp_db_user: wpuser
+wp_db_password: "WpPass123!"
+wp_admin_user: admin
+wp_admin_password: "AdminPass123!"
+wp_admin_email: admin@example.com

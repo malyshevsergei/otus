@@ -1,0 +1,63 @@
+---
+- name: Wait for apt/dpkg locks to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      sleep 3
+    done
+  changed_when: false
+  timeout: 300
+
+- name: Disable unattended-upgrades to prevent apt lock conflicts
+  systemd:
+    name: unattended-upgrades
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Remove stale Elastic repo files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/elastic-8.x.list
+    - /usr/share/keyrings/elasticsearch-keyring.gpg
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg
+      - apt-transport-https
+      - net-tools
+      - jq
+      - unzip
+      - software-properties-common
+    state: present
+
+- name: Install Java (required for Kafka and ELK)
+  apt:
+    name: openjdk-17-jre-headless
+    state: present
+
+- name: Set timezone to Europe/Moscow
+  timezone:
+    name: Europe/Moscow
+
+- name: Import Elasticsearch GPG key
+  apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+    keyring: /usr/share/keyrings/elasticsearch-keyring.gpg
+
+- name: Add Elastic repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://mirror.yandex.ru/mirrors/elastic/8 stable main"
+    state: present
+    filename: elastic-8.x
+    update_cache: yes

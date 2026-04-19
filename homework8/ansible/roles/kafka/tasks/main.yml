@@ -1,0 +1,117 @@
+---
+- name: Create kafka group
+  group:
+    name: kafka
+    system: yes
+
+- name: Create kafka user
+  user:
+    name: kafka
+    group: kafka
+    system: yes
+    shell: /bin/false
+    home: /opt/kafka
+    create_home: no
+
+- name: Create Kafka directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: kafka
+    group: kafka
+    mode: "0755"
+  loop:
+    - /opt/kafka
+    - /var/lib/kafka
+    - /var/log/kafka
+
+- name: Download Kafka
+  get_url:
+    url: "https://archive.apache.org/dist/kafka/{{ kafka_version }}/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+    dest: "/tmp/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+    timeout: 120
+
+- name: Extract Kafka
+  unarchive:
+    src: "/tmp/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+    dest: /opt/kafka
+    remote_src: yes
+    owner: kafka
+    group: kafka
+    extra_opts: [--strip-components=1]
+    creates: /opt/kafka/bin/kafka-server-start.sh
+
+- name: Deploy Kafka server.properties (KRaft mode)
+  template:
+    src: server.properties.j2
+    dest: /opt/kafka/config/kraft/server.properties
+    owner: kafka
+    group: kafka
+    mode: "0644"
+  notify: restart kafka
+
+- name: Generate Kafka cluster UUID
+  command: /opt/kafka/bin/kafka-storage.sh random-uuid
+  register: kafka_cluster_uuid
+  changed_when: false
+  become_user: kafka
+
+- name: Check if Kafka storage is already formatted
+  stat:
+    path: /var/lib/kafka/meta.properties
+  register: kafka_meta
+
+- name: Format Kafka storage (KRaft)
+  command: >
+    /opt/kafka/bin/kafka-storage.sh format
+    -t {{ kafka_cluster_uuid.stdout }}
+    -c /opt/kafka/config/kraft/server.properties
+  become_user: kafka
+  when: not kafka_meta.stat.exists
+
+- name: Deploy Kafka systemd service
+  template:
+    src: kafka.service.j2
+    dest: /etc/systemd/system/kafka.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart kafka
+
+- name: Enable and start Kafka
+  systemd:
+    name: kafka
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Wait for Kafka to be ready
+  wait_for:
+    port: "{{ kafka_port }}"
+    host: localhost
+    timeout: 60
+    delay: 5
+
+- name: Create Kafka topics
+  command: >
+    /opt/kafka/bin/kafka-topics.sh
+    --create
+    --if-not-exists
+    --topic {{ item.name }}
+    --partitions {{ item.partitions }}
+    --replication-factor {{ item.replication_factor }}
+    --bootstrap-server localhost:{{ kafka_port }}
+  become_user: kafka
+  loop: "{{ kafka_topics }}"
+  register: topic_result
+  changed_when: "'Created topic' in topic_result.stdout"
+
+- name: Verify Kafka topics
+  command: /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:{{ kafka_port }}
+  become_user: kafka
+  register: topics_list
+  changed_when: false
+
+- name: Show Kafka topics
+  debug:
+    msg: "Kafka topics: {{ topics_list.stdout_lines }}"

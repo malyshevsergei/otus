@@ -1,0 +1,99 @@
+---
+- name: Install common packages on all nodes
+  hosts: all
+  roles:
+    - common
+  tags: [common]
+
+- name: Deploy web portal (nginx + wordpress)
+  hosts: web
+  roles:
+    - web
+  tags: [web]
+
+- name: Deploy Kafka
+  hosts: kafka
+  roles:
+    - kafka
+  tags: [kafka]
+
+- name: Deploy ELK stack
+  hosts: elk
+  roles:
+    - elasticsearch
+    - logstash
+    - kibana
+  tags: [elk]
+
+- name: Wait for Elasticsearch to be ready
+  hosts: elk
+  tags: [elk, filebeat]
+  tasks:
+    - name: Wait for Elasticsearch API
+      uri:
+        url: "http://localhost:{{ elasticsearch_http_port }}/_cluster/health"
+        return_content: yes
+        status_code: 200
+      register: es_health
+      until: es_health.status == 200
+      retries: 30
+      delay: 10
+
+- name: Deploy Filebeat on log agents
+  hosts: log_agents
+  roles:
+    - filebeat
+  tags: [filebeat]
+
+- name: Create Kibana index patterns
+  hosts: elk
+  tags: [elk, kibana]
+  tasks:
+    - name: Wait for Kibana to be ready
+      uri:
+        url: "http://localhost:{{ kibana_port }}/api/status"
+        return_content: yes
+        status_code: 200
+      register: kibana_status
+      until: kibana_status.status == 200
+      retries: 30
+      delay: 10
+
+    - name: Create nginx index pattern
+      uri:
+        url: "http://localhost:{{ kibana_port }}/api/saved_objects/index-pattern/nginx-*"
+        method: POST
+        body_format: json
+        headers:
+          kbn-xsrf: "true"
+          Content-Type: "application/json"
+        body:
+          attributes:
+            title: "nginx-*"
+            timeFieldName: "@timestamp"
+        status_code: [200, 409]
+
+    - name: Create wordpress index pattern
+      uri:
+        url: "http://localhost:{{ kibana_port }}/api/saved_objects/index-pattern/wordpress-*"
+        method: POST
+        body_format: json
+        headers:
+          kbn-xsrf: "true"
+          Content-Type: "application/json"
+        body:
+          attributes:
+            title: "wordpress-*"
+            timeFieldName: "@timestamp"
+        status_code: [200, 409]
+
+    - name: Verify indices exist
+      uri:
+        url: "http://localhost:{{ elasticsearch_http_port }}/_cat/indices/nginx-*,wordpress-*?v"
+        return_content: yes
+      register: indices_check
+      ignore_errors: yes
+
+    - name: Show indices status
+      debug:
+        msg: "{{ indices_check.content | default('No indices yet - logs may not be flowing') }}"

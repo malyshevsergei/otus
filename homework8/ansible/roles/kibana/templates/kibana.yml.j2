@@ -1,0 +1,17 @@
+server.port: {{ kibana_port }}
+server.host: "0.0.0.0"
+server.name: "{{ inventory_hostname }}"
+
+elasticsearch.hosts:
+  - "http://localhost:{{ elasticsearch_http_port }}"
+
+logging:
+  appenders:
+    file:
+      type: file
+      fileName: /var/log/kibana/kibana.log
+      layout:
+        type: json
+  root:
+    appenders: [default, file]
+    level: warn

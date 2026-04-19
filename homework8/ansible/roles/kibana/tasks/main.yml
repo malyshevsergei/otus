@@ -1,0 +1,38 @@
+---
+- name: Wait for apt/dpkg locks to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      sleep 3
+    done
+  changed_when: false
+  timeout: 300
+
+- name: Install Kibana
+  apt:
+    name: "kibana={{ elk_version }}"
+    state: present
+
+- name: Deploy kibana.yml
+  template:
+    src: kibana.yml.j2
+    dest: /etc/kibana/kibana.yml
+    owner: root
+    group: kibana
+    mode: "0660"
+  notify: restart kibana
+
+- name: Enable and start Kibana
+  systemd:
+    name: kibana
+    state: started
+    enabled: yes
+
+- name: Wait for Kibana to be ready
+  uri:
+    url: "http://localhost:{{ kibana_port }}/api/status"
+    return_content: yes
+    status_code: 200
+  register: kibana_status
+  until: kibana_status.status == 200
+  retries: 30
+  delay: 10

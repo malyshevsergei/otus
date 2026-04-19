@@ -1,0 +1,76 @@
+filebeat.inputs:
+
+  # Nginx access and error logs → topic: nginx
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/nginx/access.log
+      - /var/log/nginx/error.log
+    tags: ["nginx"]
+    json.keys_under_root: true
+    json.add_error_key: true
+    json.ignore_decoding_error: true
+    fields:
+      kafka_topic: nginx
+      log_source: nginx
+      host_name: "{{ inventory_hostname }}"
+    fields_under_root: true
+
+  # WordPress debug log → topic: wordpress
+  - type: log
+    enabled: true
+    paths:
+      - /var/www/html/wordpress/wp-content/debug.log
+      - /var/log/wordpress/*.log
+    tags: ["wordpress"]
+    multiline.type: pattern
+    multiline.pattern: '^\[.*\]'
+    multiline.negate: true
+    multiline.match: after
+    fields:
+      kafka_topic: wordpress
+      log_source: wordpress
+      host_name: "{{ inventory_hostname }}"
+    fields_under_root: true
+
+  # PHP-FPM logs → topic: wordpress
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/php8.1-fpm.log
+    tags: ["wordpress"]
+    fields:
+      kafka_topic: wordpress
+      log_source: php-fpm
+      host_name: "{{ inventory_hostname }}"
+    fields_under_root: true
+
+output.kafka:
+  hosts: ["{{ kafka_internal_ip }}:{{ kafka_port }}"]
+  topic: '%{[kafka_topic]}'
+  partition.round_robin:
+    reachable_only: false
+  required_acks: 1
+  compression: gzip
+  max_message_bytes: 1000000
+  codec.json:
+    pretty: false
+
+processors:
+  - add_host_metadata: ~
+  - add_cloud_metadata: ~
+  - timestamp:
+      field: time_local
+      layouts:
+        - '02/Jan/2006:15:04:05 -0700'
+      test:
+        - '23/May/2024:10:30:00 +0300'
+      ignore_failure: true
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644

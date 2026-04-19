@@ -1,0 +1,53 @@
+---
+- name: Wait for apt/dpkg locks to be released
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      sleep 3
+    done
+  changed_when: false
+  timeout: 300
+
+- name: Install Logstash
+  apt:
+    name: "logstash=1:{{ elk_version }}-1"
+    state: present
+
+- name: Deploy logstash.yml
+  template:
+    src: logstash.yml.j2
+    dest: /etc/logstash/logstash.yml
+    owner: root
+    group: logstash
+    mode: "0660"
+  notify: restart logstash
+
+- name: Deploy pipeline configuration
+  template:
+    src: pipeline.conf.j2
+    dest: /etc/logstash/conf.d/kafka-to-elasticsearch.conf
+    owner: root
+    group: logstash
+    mode: "0660"
+  notify: restart logstash
+
+- name: Set Logstash startup timeout
+  lineinfile:
+    path: /etc/default/logstash
+    line: 'LS_STARTUP_SLEEP_TIME=5'
+    create: yes
+
+- name: Enable and start Logstash
+  systemd:
+    name: logstash
+    state: started
+    enabled: yes
+
+- name: Wait for Logstash to start (pipeline initialization)
+  pause:
+    seconds: 60
+
+- name: Verify Logstash is running
+  systemd:
+    name: logstash
+  register: logstash_status
+  failed_when: logstash_status.status.ActiveState != 'active'

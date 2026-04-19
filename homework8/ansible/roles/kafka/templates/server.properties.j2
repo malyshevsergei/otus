@@ -1,0 +1,41 @@
+# KRaft mode - no Zookeeper required
+process.roles=broker,controller
+node.id=1
+
+# Cluster ID is set during storage format step
+controller.quorum.voters=1@localhost:9093
+
+# Listeners
+listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://localhost:9093
+inter.broker.listener.name=PLAINTEXT
+advertised.listeners=PLAINTEXT://{{ internal_ip }}:9092
+controller.listener.names=CONTROLLER
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+
+# Log storage
+log.dirs=/var/lib/kafka
+
+# Topic defaults (single node - replication factor set per topic)
+num.partitions=2
+default.replication.factor=1
+min.insync.replicas=1
+
+# Internal topics replication (single node)
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+
+# Log retention
+log.retention.hours={{ kafka_log_retention_hours }}
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+
+# Network
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# Group coordinator
+group.initial.rebalance.delay.ms=0
