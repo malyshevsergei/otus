@@ -1,0 +1,36 @@
+---
+# Stop background apt jobs that hold the dpkg lock on first boot.
+# `systemctl stop` blocks until the service exits, so this returns
+# only when the lock is free.
+- name: Stop apt-daily / unattended-upgrades services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+    - apt-daily.service
+    - apt-daily-upgrade.service
+    - unattended-upgrades.service
+  become: true
+  failed_when: false
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+    lock_timeout: 600
+  become: true
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - unzip
+      - jq
+      - dnsutils
+      - python3
+    state: present
+    lock_timeout: 600
+  become: true

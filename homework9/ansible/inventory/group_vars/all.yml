@@ -1,0 +1,28 @@
+# Consul version to install
+consul_version: "1.21.5"
+
+# HashiCorp releases mirror (releases.hashicorp.com is geoblocked from Yandex Cloud)
+consul_mirror: "https://hashicorp-releases.yandexcloud.net"
+consul_download_url: "{{ consul_mirror }}/consul/{{ consul_version }}/consul_{{ consul_version }}_linux_amd64.zip"
+
+# Cluster settings
+consul_datacenter: "dc1"
+consul_domain: "consul"
+
+# Gossip encryption key — generate with: consul keygen
+# Replace this placeholder before deploying
+consul_encrypt_key: "giP6C52CUH2wKsR+HaX8ME2aItvqaRBxeQfadBX+2w0="
+
+# Internal IPs of all Consul servers (used in retry_join)
+consul_server_ips:
+  - 10.132.0.11
+  - 10.132.0.12
+  - 10.132.0.13
+
+# Public IP of consul-server-1 — used as SSH ProxyJump bastion.
+# Fill in after: terraform output bastion_public_ip
+bastion_public_ip: "93.77.183.156"
+
+# Webapp service registered in Consul
+webapp_service_name: "webapp"
+webapp_port: 80

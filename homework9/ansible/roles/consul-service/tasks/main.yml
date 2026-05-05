@@ -1,0 +1,18 @@
+---
+- name: Write webapp service definition for Consul
+  template:
+    src: webapp-service.json.j2
+    dest: /etc/consul.d/webapp-service.json
+    owner: consul
+    group: consul
+    mode: '0640'
+  become: true
+  notify: reload consul
+
+- name: Validate consul configuration
+  command: consul validate /etc/consul.d/
+  become: true
+  changed_when: false
+
+- name: Flush handlers to apply service registration immediately
+  meta: flush_handlers

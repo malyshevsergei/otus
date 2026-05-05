@@ -1,0 +1,17 @@
+---
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  become: true
+
+- name: restart consul
+  systemd:
+    name: consul
+    state: restarted
+  become: true
+
+- name: restart systemd-resolved
+  systemd:
+    name: systemd-resolved
+    state: restarted
+  become: true

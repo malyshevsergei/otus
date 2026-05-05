@@ -1,0 +1,16 @@
+{
+  "service": {
+    "name": "{{ webapp_service_name }}",
+    "tags": ["nginx", "web", "portal"],
+    "address": "{{ consul_bind_addr }}",
+    "port": {{ webapp_port }},
+    "check": {
+      "id": "webapp-http-check",
+      "name": "HTTP health check on port {{ webapp_port }}",
+      "http": "http://{{ consul_bind_addr }}:{{ webapp_port }}/health",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}

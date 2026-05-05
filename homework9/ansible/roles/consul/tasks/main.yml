@@ -1,0 +1,100 @@
+---
+- name: Create consul system group
+  group:
+    name: consul
+    system: yes
+  become: true
+
+- name: Create consul system user
+  user:
+    name: consul
+    group: consul
+    system: yes
+    shell: /bin/false
+    home: /opt/consul
+    create_home: no
+  become: true
+
+- name: Create consul data and config directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: consul
+    group: consul
+    mode: '0755'
+  loop:
+    - /opt/consul
+    - /etc/consul.d
+  become: true
+
+- name: Check if consul binary is already installed at correct version
+  command: consul version
+  register: consul_installed_version
+  failed_when: false
+  changed_when: false
+
+# releases.hashicorp.com geoblocks YC; use the Yandex Cloud HashiCorp mirror
+- name: Download consul binary from Yandex Cloud HashiCorp mirror
+  get_url:
+    url: "{{ consul_download_url }}"
+    dest: "/tmp/consul_{{ consul_version }}.zip"
+    mode: '0644'
+  become: true
+  when: consul_version not in (consul_installed_version.stdout | default(''))
+
+- name: Install consul binary
+  unarchive:
+    src: "/tmp/consul_{{ consul_version }}.zip"
+    dest: /usr/local/bin/
+    remote_src: yes
+    mode: '0755'
+  become: true
+  when: consul_version not in (consul_installed_version.stdout | default(''))
+  notify: restart consul
+
+- name: Write consul configuration
+  template:
+    src: consul.hcl.j2
+    dest: /etc/consul.d/consul.hcl
+    owner: consul
+    group: consul
+    mode: '0640'
+  become: true
+  notify: restart consul
+
+- name: Install consul systemd service
+  template:
+    src: consul.service.j2
+    dest: /etc/systemd/system/consul.service
+    mode: '0644'
+  become: true
+  notify:
+    - reload systemd
+    - restart consul
+
+- name: Enable and start consul service
+  systemd:
+    name: consul
+    enabled: yes
+    state: started
+  become: true
+
+# DNS: forward .consul queries to Consul's DNS port (8600) via systemd-resolved
+- name: Create systemd-resolved drop-in directory
+  file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Configure systemd-resolved to forward .consul to Consul DNS
+  copy:
+    dest: /etc/systemd/resolved.conf.d/consul.conf
+    content: |
+      [Resolve]
+      DNS=127.0.0.1:8600
+      DNSSEC=false
+      Domains=~consul
+    mode: '0644'
+  become: true
+  notify: restart systemd-resolved

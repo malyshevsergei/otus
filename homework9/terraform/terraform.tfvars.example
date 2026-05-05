@@ -1,0 +1,8 @@
+zone                 = "ru-central1-a"
+image_id             = "fd81radk00nmm2jpqh94"
+ssh_public_key_path  = "~/.ssh/id_rsa.pub"
+consul_server_cores  = 2
+consul_server_memory = 2
+web_cores            = 2
+web_memory           = 2
+disk_size            = 15

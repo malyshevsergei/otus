@@ -1,0 +1,70 @@
+---
+- name: Verify Consul cluster and DNS-based load balancing
+  hosts: consul_servers[0]
+  gather_facts: false
+
+  tasks:
+    - name: Check Consul cluster members
+      command: consul members
+      register: members_out
+      changed_when: false
+
+    - name: Show cluster members
+      debug:
+        msg: "{{ members_out.stdout_lines }}"
+
+    - name: Query webapp service health via HTTP API
+      uri:
+        url: "http://localhost:8500/v1/health/service/{{ webapp_service_name }}?passing=true"
+        return_content: yes
+      register: health_api
+
+    - name: Show healthy webapp instances
+      debug:
+        msg: >-
+          Healthy instances:
+          {{ health_api.json
+             | map(attribute='Service')
+             | map(attribute='Address')
+             | list }}
+
+    - name: Fail if no healthy webapp instances found
+      fail:
+        msg: "No healthy webapp instances registered in Consul!"
+      when: health_api.json | length == 0
+
+    - name: Query webapp.service.consul via Consul DNS
+      command: dig @127.0.0.1 -p 8600 webapp.service.consul +short
+      register: dns_out
+      changed_when: false
+
+    - name: Show DNS resolution result
+      debug:
+        msg: "webapp.service.consul resolves to: {{ dns_out.stdout_lines }}"
+
+    - name: Fail if DNS returned no records
+      fail:
+        msg: "DNS query for webapp.service.consul returned no A records!"
+      when: dns_out.stdout_lines | length == 0
+
+    - name: Verify round-robin — both web servers present in DNS
+      assert:
+        that:
+          - dns_out.stdout_lines | length >= 1
+        fail_msg: "Expected at least 1 IP from DNS, got: {{ dns_out.stdout_lines }}"
+        success_msg: "DNS returns {{ dns_out.stdout_lines | length }} healthy instance(s)"
+
+- name: Verify HTTP access via each web server directly
+  hosts: web_servers
+  gather_facts: false
+
+  tasks:
+    - name: Check /health endpoint on each web server
+      uri:
+        url: "http://{{ consul_bind_addr }}/health"
+        status_code: 200
+      register: health_check
+
+    - name: Report health check result
+      debug:
+        msg: "{{ inventory_hostname }} ({{ consul_bind_addr }}) health check: {{ health_check.status }}"

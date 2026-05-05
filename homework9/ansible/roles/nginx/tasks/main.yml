@@ -1,0 +1,65 @@
+---
+- name: Install nginx
+  apt:
+    name: nginx
+    state: present
+    lock_timeout: 600
+  become: true
+
+- name: Deploy webapp nginx virtual host
+  template:
+    src: webapp.conf.j2
+    dest: /etc/nginx/sites-available/webapp
+    mode: '0644'
+  become: true
+  notify: reload nginx
+
+- name: Enable webapp site
+  file:
+    src: /etc/nginx/sites-available/webapp
+    dest: /etc/nginx/sites-enabled/webapp
+    state: link
+  become: true
+  notify: reload nginx
+
+- name: Remove default nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  become: true
+  notify: reload nginx
+
+- name: Create web root directory
+  file:
+    path: /var/www/html
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  become: true
+
+- name: Deploy index page showing server identity
+  copy:
+    dest: /var/www/html/index.html
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head><title>Web Portal</title></head>
+      <body>
+        <h1>Web Portal</h1>
+        <p>Served by: <strong>{{ inventory_hostname }}</strong></p>
+        <p>Internal IP: <strong>{{ consul_bind_addr }}</strong></p>
+        <p>This instance is registered in Consul as service <em>webapp</em>.</p>
+      </body>
+      </html>
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  become: true
+
+- name: Ensure nginx is started and enabled
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
+  become: true

@@ -1,0 +1,27 @@
+---
+# Phase 1: common baseline on all nodes
+- name: Common setup
+  hosts: all
+  become: true
+  roles:
+    - common
+
+# Phase 2: Consul servers — quorum must come up first
+- name: Deploy Consul servers
+  hosts: consul_servers
+  become: true
+  vars:
+    consul_mode: server
+  roles:
+    - consul
+
+# Phase 3: Web servers — Consul client + nginx + service registration
+- name: Deploy web servers (Consul client + nginx + service registration)
+  hosts: web_servers
+  become: true
+  vars:
+    consul_mode: client
+  roles:
+    - consul
+    - nginx
+    - consul-service
